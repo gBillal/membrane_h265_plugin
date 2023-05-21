@@ -2,11 +2,11 @@ defmodule Membrane.Template.Mixfile do
   use Mix.Project
 
   @version "0.1.0"
-  @github_url "https://github.com/membraneframework/membrane_template_plugin"
+  @github_url "https://github.com/gBillal/membrane_h265_plugin"
 
   def project do
     [
-      app: :membrane_template_plugin,
+      app: :membrane_h265_plugin,
       version: @version,
       elixir: "~> 1.13",
       elixirc_paths: elixirc_paths(Mix.env()),
@@ -15,11 +15,11 @@ defmodule Membrane.Template.Mixfile do
       dialyzer: dialyzer(),
 
       # hex
-      description: "Template Plugin for Membrane Multimedia Framework",
+      description: "Mambrane h265 Parser",
       package: package(),
 
       # docs
-      name: "Membrane Template plugin",
+      name: "Membrane H265 plugin",
       source_url: @github_url,
       docs: docs()
     ]
