@@ -23,9 +23,9 @@ defmodule Membrane.H265.Parser.Format do
   ]
 
   @doc """
-  Prepares the `Membrane.H264.t()` format based on the parsed SPS NALu.
+  Prepares the `Membrane.H265.t()` format based on the parsed SPS NALu.
   During the process, the function determines the profile of
-  the h264 stream and the picture resolution.
+  the h265 stream and the picture resolution.
   """
   @spec from_sps(
           sps_nalu :: H265.Parser.NALu.t(),
@@ -46,9 +46,9 @@ defmodule Membrane.H265.Parser.Format do
     {width, height} =
       if sps.conformance_window_flag == 1 do
         {sps.pic_width_in_luma_samples -
-           sub_width_c * (sps.conf_win_right_offset + sps.conf_win_left_offset + 1),
+           sub_width_c * (sps.conf_win_right_offset + sps.conf_win_left_offset),
          sps.pic_height_in_luma_samples -
-           sub_height_c * (sps.conf_win_bottom_offset + sps.conf_win_top_offset + 1)}
+           sub_height_c * (sps.conf_win_bottom_offset + sps.conf_win_top_offset)}
       else
         {sps.pic_width_in_luma_samples, sps.pic_height_in_luma_samples}
       end

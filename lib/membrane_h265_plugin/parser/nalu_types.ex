@@ -1,7 +1,7 @@
 defmodule Membrane.H265.Parser.NALuTypes do
   @moduledoc """
-  The module aggregating the mapping of from `nal_unit_type`
-  fields of the NAL unit to the human-friendly name of a NALu type.
+  The module aggregating the mapping of `nal_unit_type` fields
+  of the NAL unit to the human-friendly name of a NALu type.
   """
 
   @nalu_types %{
@@ -73,8 +73,9 @@ defmodule Membrane.H265.Parser.NALuTypes do
   @doc """
   Returns the list of IRAP NAL units.
 
-  An IRAP Nalu type starts a new access unit and it's a keyframe which
-  can be decoded without any prior coded picture
+  An IRAP (Intra Random Access Picture) NALu type denotes a picture that can be decoded
+  without referencing prior pictures.
+  IDR and BLA NALus start a new VCS(Video Coded Sequence).
   """
   @spec irap_nalus() :: [nalu_type()]
   def irap_nalus(), do: [:bla_w_lp, :bla_w_radl, :bla_n_lp, :idr_w_radl, :idr_n_lp, :cra]

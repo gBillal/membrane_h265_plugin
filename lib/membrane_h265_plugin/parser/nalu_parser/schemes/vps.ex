@@ -28,8 +28,8 @@ defmodule Membrane.H265.Parser.NALuParser.Schemes.VPS do
               iterator: :i,
               from:
                 {&if(&1 == 1, do: 0, else: &2),
-                 [:sub_layer_ordering_info_present_flag, :max_sub_layers_minus1],
-                 to: {& &1, [:max_sub_layers_minus1]}}
+                 [:sub_layer_ordering_info_present_flag, :max_sub_layers_minus1]},
+              to: {& &1, [:max_sub_layers_minus1]}
             ],
             field: {:max_dec_pic_buffering_minus1, :ue},
             field: {:max_num_reorder_pics, :ue},
@@ -57,5 +57,4 @@ defmodule Membrane.H265.Parser.NALuParser.Schemes.VPS do
           },
           save_state_as_global_state: {&{:vps, &1}, [:video_parameter_set_id]}
         ]
-
 end

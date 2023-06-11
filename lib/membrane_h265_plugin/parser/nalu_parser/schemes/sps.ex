@@ -154,12 +154,16 @@ defmodule Membrane.H265.Parser.NALuParser.Schemes.SPS do
 
   defp st_ref_pic_set() do
     [
+      execute: fn payload, state, _iterators ->
+        {payload,
+         put_in(state, [:__local__, :inter_ref_pic_set_prediction_flag], %{state.__local__.i => 0})}
+      end,
       if: {
         {&(&1 != 0), [:i]},
         field: {:inter_ref_pic_set_prediction_flag, :u1}
       },
       if: {
-        {& &1[&2], [:inter_ref_pic_set_prediction_flag, :i]},
+        {&(&1[&2] == 1), [:inter_ref_pic_set_prediction_flag, :i]},
         if: {
           {&(&1 == &2), [:num_short_term_ref_pic_sets, :i]},
           field: {:delta_idx_minus1, :ue}
