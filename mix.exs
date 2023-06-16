@@ -61,7 +61,7 @@ defmodule Membrane.Template.Mixfile do
 
   defp package do
     [
-      maintainers: ["Membrane Team"],
+      maintainers: [],
       licenses: ["Apache-2.0"],
       links: %{
         "GitHub" => @github_url,
@@ -76,7 +76,8 @@ defmodule Membrane.Template.Mixfile do
       extras: ["README.md", "LICENSE"],
       formatters: ["html"],
       source_ref: "v#{@version}",
-      nest_modules_by_prefix: [Membrane.Template]
+      filter_modules: "Membrane\.H265\.Parser",
+      nest_modules_by_prefix: [Membrane.H265.Parser]
     ]
   end
 end

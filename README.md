@@ -2,7 +2,7 @@
 
 Membrane H265 parser. It is the Membrane element responsible for parsing the incoming h265 stream. The parsing is done as a sequence of the following steps:
 
-  * splitting the h265 stream into stream NAL units, based on the "Annex B" of the "ITU-T Rec. H.265 (08/2021)"
+  * Splitting the h265 stream into stream NAL units, based on the "Annex B" of the "ITU-T Rec. H.265 (08/2021)"
   * Parsing the NAL unit headers, so that to read the type of the NAL unit
   * Parsing the NAL unit body with the appropriate scheme, based on the NAL unit type read in the step before
   * Aggregating the NAL units into a stream of access units
@@ -16,7 +16,7 @@ The package can be installed by adding `membrane_h265_plugin` to your list of de
 ```elixir
 def deps do
   [
-    {:membrane_template_plugin, github: "gBillal/membrane_h265_plugin", tag: "v0.1.0"}
+    {:membrane_h265_plugin, "~> 0.1.0"}
   ]
 end
 ```

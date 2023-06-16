@@ -5,12 +5,11 @@ defmodule Membrane.H265.Parser.AUSplitter do
 
   The access unit splitter's behaviour is based on *"7.4.2.4.4
   Order of NAL units and coded pictures and association to access units"*
-  of the *"ITU-T Rec. H.265 (08/2021)"* specification. The most crucial part
-  of the access unit splitter is the mechanism to detect new primary coded video picture.
+  of the *"ITU-T Rec. H.265 (08/2021)"* specification.
 
-  The current implementation does not implement all the checks, it splits the nalu into
-  access units either when a non vcl nalu with type `:vps`, `:sps`, `:pps`, `:aud`, `:prefix_sei` is found
-  or when the vcl nal unit type <= 9 or between 16 and 25 and has `first_slice_segment_in_pic_flag` is set.
+  The current implementation splits the nalu into access units either when a non vcl nalu with type
+  `:vps`, `:sps`, `:pps`, `:aud`, `:prefix_sei` is encountered or when the vcl nal unit type is <= 9 or
+  between 16 and 25 and has `first_slice_segment_in_pic_flag` is set.
   """
   alias Membrane.H265.Parser.{NALu, NALuTypes}
 
@@ -59,13 +58,13 @@ defmodule Membrane.H265.Parser.AUSplitter do
   @doc """
   Splits the given list of NAL units into the access units.
 
-  It can be used for a stream which is not completly available at the time of function invoction,
+  It can be used for a stream which is not completely available at the time of function invocation,
   as the function updates the state of the access unit splitter - the function can
   be invoked once more, with new NAL units and the updated state.
   Under the hood, `split/2` defines a finite state machine
   with two states: `:first` and `:second`. The state `:first` describes the state before
-  reaching the primary coded picture NALu of a given access unit. The state `:second`
-  describes the state after processing the primary coded picture NALu of a given
+  reaching the first segment of a coded picture NALu of a given access unit. The state `:second`
+  describes the state after processing the first segment of the coded picture of a given
   access unit.
   """
   @spec split(list(NALu.t()), t()) :: {list(access_unit_t()), t()}
@@ -73,7 +72,7 @@ defmodule Membrane.H265.Parser.AUSplitter do
 
   def split([first_nalu | rest_nalus], %{fsm_state: :first} = state) do
     cond do
-      access_unit_first_coded_vcl_nalu?(first_nalu) ->
+      access_unit_first_slice_segment?(first_nalu) ->
         split(
           rest_nalus,
           %__MODULE__{
@@ -110,7 +109,7 @@ defmodule Membrane.H265.Parser.AUSplitter do
           }
         )
 
-      access_unit_first_coded_vcl_nalu?(first_nalu) ->
+      access_unit_first_slice_segment?(first_nalu) ->
         split(
           rest_nalus,
           %__MODULE__{
@@ -150,7 +149,7 @@ defmodule Membrane.H265.Parser.AUSplitter do
     {state.nalus_acc, %{state | nalus_acc: []}}
   end
 
-  defp access_unit_first_coded_vcl_nalu?(nalu) do
+  defp access_unit_first_slice_segment?(nalu) do
     nalu.type in NALuTypes.vcl_nalu_types() and
       nalu.parsed_fields.first_slice_segment_in_pic_flag == 1
   end
