@@ -29,6 +29,8 @@ defmodule Membrane.H265.Parser do
   alias Membrane.H265.Parser.{AUSplitter, Format, NALuParser, NALuSplitter, NALuTypes}
   alias Membrane.{Buffer, RemoteStream}
 
+  @nal_prefix <<0, 0, 0, 1>>
+
   def_input_pad :input,
     demand_unit: :buffers,
     demand_mode: :auto,
@@ -81,8 +83,12 @@ defmodule Membrane.H265.Parser do
 
   @impl true
   def handle_init(_ctx, opts) do
+    vps = maybe_add_prefix(opts.vps)
+    sps = maybe_add_prefix(opts.sps)
+    pps = maybe_add_prefix(opts.pps)
+
     state = %{
-      nalu_splitter: NALuSplitter.new(opts.vps <> opts.sps <> opts.pps),
+      nalu_splitter: NALuSplitter.new(vps <> sps <> pps),
       nalu_parser: NALuParser.new(),
       au_splitter: AUSplitter.new(),
       mode: nil,
@@ -191,6 +197,15 @@ defmodule Membrane.H265.Parser do
   @impl true
   def handle_end_of_stream(_pad, _ctx, state) do
     {[end_of_stream: :output], state}
+  end
+
+  defp maybe_add_prefix(parameter_set) do
+    case parameter_set do
+      <<>> -> <<>>
+      <<0, 0, 1, _rest::binary>> -> parameter_set
+      <<0, 0, 0, 1, _rest::binary>> -> parameter_set
+      parameter_set -> @nal_prefix <> parameter_set
+    end
   end
 
   defp prepare_actions_for_aus(aus, state, buffer_pts \\ nil, buffer_dts \\ nil) do

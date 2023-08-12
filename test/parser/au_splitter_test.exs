@@ -8,7 +8,7 @@ defmodule AUSplitterTest do
   # These values were obtained with the use of FFmpeg
   @au_lengths_ffmpeg %{
     "10-1920x1080" => [133_766, 1517, 474, 311, 298, 200, 3257, 547, 209],
-    "10-480x320-mainstillpicture" => [35202, 8912, 8878, 8850, 8845, 8854, 8819, 8823, 8787]
+    "10-480x320-mainstillpicture" => [35_202, 8912, 8878, 8850, 8845, 8854, 8819, 8823, 8787]
   }
 
   defmodule FullBinaryParser do

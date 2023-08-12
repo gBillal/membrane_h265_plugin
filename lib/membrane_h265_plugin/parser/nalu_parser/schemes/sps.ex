@@ -51,7 +51,7 @@ defmodule Membrane.H265.Parser.NALuParser.Schemes.SPS do
             ],
             field: {:max_dec_pic_buffering_minus1, :ue},
             field: {:max_num_reorder_pics, :ue},
-            field: {:sps_max_latency_increase_plus1, :ue}
+            field: {:max_latency_increase_plus1, :ue}
           },
           field: {:log2_min_luma_coding_block_size_minus3, :ue},
           field: {:log2_diff_max_min_luma_coding_block_size, :ue},
@@ -275,7 +275,7 @@ defmodule Membrane.H265.Parser.NALuParser.Schemes.SPS do
 
       {payload, state}
     else
-      _ -> {payload, state}
+      _other -> {payload, state}
     end
   end
 end

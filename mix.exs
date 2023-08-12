@@ -1,4 +1,4 @@
-defmodule Membrane.Template.Mixfile do
+defmodule Membrane.H265.Plugin.Mixfile do
   use Mix.Project
 
   @version "0.1.0"

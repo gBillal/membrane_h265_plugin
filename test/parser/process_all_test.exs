@@ -2,30 +2,61 @@ defmodule Membrane.H265.ProcessAllTest do
   @moduledoc false
 
   use ExUnit.Case
+
   import Membrane.ChildrenSpec
   import Membrane.Testing.Assertions
+
   alias Membrane.H265
   alias Membrane.Testing.Pipeline
 
-  defp make_pipeline(in_path, out_path) do
+  defp make_pipeline(in_path, out_path, parameter_sets) do
     structure = [
       child(:file_src, %Membrane.File.Source{chunk_size: 40_960, location: in_path})
-      |> child(:parser, H265.Parser)
+      |> child(:parser, %H265.Parser{
+        vps: parameter_sets[:vps] || <<>>,
+        sps: parameter_sets[:sps] || <<>>,
+        pps: parameter_sets[:pps] || <<>>
+      })
       |> child(:sink, %Membrane.File.Sink{location: out_path})
     ]
 
     Pipeline.start_link_supervised(structure: structure)
   end
 
-  defp perform_test(filename, tmp_dir, timeout) do
+  defp strip_parameter_sets(file) do
+    data = File.read!(file)
+
+    data
+    |> :binary.matches([<<0, 0, 1>>, <<0, 0, 0, 1>>])
+    |> Enum.chunk_every(2, 1, [{byte_size(data), nil}])
+    |> Enum.map(fn [{from, _}, {to, _}] -> :binary.part(data, from, to - from) end)
+    |> Enum.filter(fn
+      <<0, 0, 1, 0::1, type::6, 0::1, _rest::binary>> when type in [32, 33, 34, 39] -> false
+      <<0, 0, 0, 1, 0::1, type::6, 0::1, _rest::binary>> when type in [32, 33, 34, 39] -> false
+      _ -> true
+    end)
+    |> Enum.join()
+  end
+
+  defp perform_test(
+         filename,
+         tmp_dir,
+         timeout,
+         parameter_sets \\ [],
+         ignore_parameter_sets \\ false
+       ) do
     in_path = "../fixtures/input-#{filename}.h265" |> Path.expand(__DIR__)
     out_path = Path.join(tmp_dir, "output-all-#{filename}.h265")
 
-    assert {:ok, _supervisor_pid, pid} = make_pipeline(in_path, out_path)
+    assert {:ok, _supervisor_pid, pid} = make_pipeline(in_path, out_path, parameter_sets)
     assert_pipeline_play(pid)
     assert_end_of_stream(pid, :sink, :input, timeout)
 
-    assert File.read(out_path) == File.read(in_path)
+    if ignore_parameter_sets do
+      assert strip_parameter_sets(out_path) == strip_parameter_sets(in_path)
+    else
+      assert File.read(out_path) == File.read(in_path)
+    end
 
     Pipeline.terminate(pid, blocking?: true)
   end
@@ -59,6 +90,51 @@ defmodule Membrane.H265.ProcessAllTest do
 
     test "process all 60 1080p frames", ctx do
       perform_test("60-1920x1080", ctx.tmp_dir, 1000)
+    end
+
+    test "process all 8 2K frames", ctx do
+      # The bytestream contains AUD nalus and each access unit
+      # has multiple slices
+      perform_test("8-2K", ctx.tmp_dir, 1000)
+    end
+
+    test "process all 60 480p frames with provided parameter sets", ctx do
+      vps =
+        <<64, 1, 12, 1, 255, 255, 33, 96, 0, 0, 3, 0, 144, 0, 0, 3, 0, 0, 3, 0, 153, 149, 152, 9>>
+
+      sps =
+        <<66, 1, 1, 33, 96, 0, 0, 3, 0, 144, 0, 0, 3, 0, 0, 3, 0, 153, 160, 5, 2, 1, 225, 101,
+          149, 154, 73, 50, 188, 57, 160, 32, 0, 0, 3, 0, 32, 0, 0, 3, 3, 193>>
+
+      pps = <<68, 1, 193, 114, 180, 98, 64>>
+
+      # Parameter sets without prefix
+      perform_test(
+        "60-640x480-no-parameter-sets",
+        ctx.tmp_dir,
+        1000,
+        [vps: vps, sps: sps, pps: pps],
+        true
+      )
+
+      # Parameter sets with prefix
+      prefix = <<0, 0, 0, 1>>
+
+      perform_test(
+        "60-640x480-no-parameter-sets",
+        ctx.tmp_dir,
+        1000,
+        [vps: prefix <> vps, sps: prefix <> sps, pps: prefix <> pps],
+        true
+      )
+
+      perform_test(
+        "60-640x480-no-parameter-sets",
+        ctx.tmp_dir,
+        1000,
+        [vps: vps, sps: prefix <> sps, pps: <<0, 0, 1>> <> pps],
+        true
+      )
     end
   end
 end
