@@ -1,4 +1,5 @@
 defmodule Membrane.H265.ModesTest do
+  @moduledoc false
   use ExUnit.Case
 
   import Membrane.ChildrenSpec
@@ -10,10 +11,10 @@ defmodule Membrane.H265.ModesTest do
   alias Membrane.H265.Support.TestSource
   alias Membrane.Testing.{Pipeline, Sink}
 
-  @h265_input_file "test/fixtures/input-10-1920x1080.h265"
+  @h265_input_file "test/fixtures/input-8-2K.h265"
   defp prepare_buffers(binary, :bytestream) do
     buffers =
-      :binary.bin_to_list(binary) |> Enum.chunk_every(400) |> Enum.map(&:binary.list_to_bin(&1))
+      :binary.bin_to_list(binary) |> Enum.chunk_every(4000) |> Enum.map(&:binary.list_to_bin(&1))
 
     Enum.map(buffers, &%Membrane.Buffer{payload: &1})
   end
@@ -60,8 +61,8 @@ defmodule Membrane.H265.ModesTest do
     mode = :bytestream
     input_buffers = prepare_buffers(binary, mode)
 
-    {:ok, _supervisor_pid, pid} =
-      Pipeline.start_supervised(
+    pid =
+      Pipeline.start_supervised!(
         structure: [
           child(:source, %TestSource{mode: mode})
           |> child(:parser, Parser)
@@ -88,8 +89,8 @@ defmodule Membrane.H265.ModesTest do
     mode = :nalu_aligned
     input_buffers = prepare_buffers(binary, mode)
 
-    {:ok, _supervisor_pid, pid} =
-      Pipeline.start_supervised(
+    pid =
+      Pipeline.start_supervised!(
         structure: [
           child(:source, %TestSource{mode: mode})
           |> child(:parser, Parser)
@@ -118,8 +119,8 @@ defmodule Membrane.H265.ModesTest do
     mode = :au_aligned
     input_buffers = prepare_buffers(binary, mode)
 
-    {:ok, _supervisor_pid, pid} =
-      Pipeline.start_supervised(
+    pid =
+      Pipeline.start_supervised!(
         structure: [
           child(:source, %TestSource{mode: mode})
           |> child(:parser, Parser)
@@ -140,6 +141,32 @@ defmodule Membrane.H265.ModesTest do
       assert_sink_buffer(pid, :sink, %Buffer{payload: ^payload, pts: ^pts, dts: ^dts})
     end)
 
+    Pipeline.terminate(pid, blocking?: true)
+  end
+
+  test "if single NAL unit is sent per buffer with `output_alignment: :nalu`" do
+    pid =
+      Pipeline.start_supervised!(
+        structure: [
+          child(:source, %Membrane.File.Source{location: @h265_input_file})
+          |> child(:parser, %Parser{output_alignment: :nalu})
+          |> child(:sink, Sink)
+        ]
+      )
+
+    assert_pipeline_play(pid)
+    assert_sink_stream_format(pid, :sink, %Membrane.H265{alignment: :nalu})
+
+    binary = File.read!(@h265_input_file)
+    ref_buffers = prepare_buffers(binary, :nalu_aligned)
+
+    Enum.each(ref_buffers, fn ref_buffer ->
+      assert_sink_buffer(pid, :sink, buffer)
+      assert buffer.payload == ref_buffer.payload
+      assert Map.has_key?(buffer.metadata, :h265) and Map.has_key?(buffer.metadata.h265, :type)
+    end)
+
+    assert_end_of_stream(pid, :sink)
     Pipeline.terminate(pid, blocking?: true)
   end
 end

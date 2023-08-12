@@ -6,15 +6,6 @@ defmodule Membrane.H265.Parser.Format do
 
   alias Membrane.H265
 
-  @default_format %H265{
-    alignment: :au,
-    framerate: nil,
-    height: 720,
-    nalu_in_metadata?: true,
-    profile: :main,
-    width: 1280
-  }
-
   @profiles_description [
     main: [profile_idc: 1],
     main_10: [profile_idc: 2],
@@ -29,7 +20,10 @@ defmodule Membrane.H265.Parser.Format do
   """
   @spec from_sps(
           sps_nalu :: H265.Parser.NALu.t(),
-          options_fields :: [framerate: {pos_integer(), pos_integer()}]
+          options_fields :: [
+            framerate: {pos_integer(), pos_integer()},
+            output_alignment: :au | :nalu
+          ]
         ) :: H265.t()
   def from_sps(sps_nalu, options_fields) do
     sps = sps_nalu.parsed_fields
@@ -56,11 +50,12 @@ defmodule Membrane.H265.Parser.Format do
     profile = parse_profile(sps_nalu)
 
     %H265{
-      @default_format
-      | width: width,
-        height: height,
-        profile: profile,
-        framerate: Keyword.get(options_fields, :framerate)
+      width: width,
+      height: height,
+      profile: profile,
+      framerate: Keyword.get(options_fields, :framerate),
+      alignment: Keyword.get(options_fields, :output_alignment),
+      nalu_in_metadata?: true
     }
   end
 

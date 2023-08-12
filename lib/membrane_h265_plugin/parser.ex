@@ -37,12 +37,14 @@ defmodule Membrane.H265.Parser do
     accepted_format:
       any_of(
         %RemoteStream{type: :bytestream},
-        %H265.RemoteStream{alignment: alignment} when alignment in [:au, :nalu]
+        %H265.RemoteStream{alignment: alignment} when alignment in [:au, :nalu],
+        %H265{alignment: alignment} when alignment in [:au, :nalu]
       )
 
   def_output_pad :output,
     demand_mode: :auto,
-    accepted_format: %H265{alignment: :au, nalu_in_metadata?: true}
+    accepted_format:
+      %H265{alignment: alignment, nalu_in_metadata?: true} when alignment in [:au, :nalu]
 
   def_options vps: [
                 spec: binary(),
@@ -79,6 +81,16 @@ defmodule Membrane.H265.Parser do
                 denominator.
                 Its value will be sent inside the output Membrane.H265 stream format.
                 """
+              ],
+              output_alignment: [
+                spec: :au | :nalu,
+                default: :au,
+                description: """
+                Alignment of the buffers produced as an output of the parser.
+                If set to `:au`, each output buffer will be a single access unit.
+                Otherwise, if set to `:nalu`, each output buffer will be a single NAL unit.
+                Defaults to `:au`.
+                """
               ]
 
   @impl true
@@ -95,7 +107,8 @@ defmodule Membrane.H265.Parser do
       profile: nil,
       previous_timestamps: {nil, nil},
       framerate: opts.framerate,
-      au_counter: 0
+      au_counter: 0,
+      output_alignment: opts.output_alignment
     }
 
     {[], state}
@@ -108,6 +121,8 @@ defmodule Membrane.H265.Parser do
         %RemoteStream{type: :bytestream} -> :bytestream
         %H265.RemoteStream{alignment: :nalu} -> :nalu_aligned
         %H265.RemoteStream{alignment: :au} -> :au_aligned
+        %H265{alignment: :au} -> :au_aligned
+        %H265{alignment: :nalu} -> :nalu_aligned
       end
 
     state = %{state | mode: mode}
@@ -215,8 +230,11 @@ defmodule Membrane.H265.Parser do
         {sps_actions, profile} = maybe_parse_sps(au, state, profile)
         {pts, dts} = prepare_timestamps(buffer_pts, buffer_dts, state)
 
-        {actions_acc ++ sps_actions ++ [{:buffer, {:output, wrap_into_buffer(au, pts, dts)}}],
-         cnt + 1, profile}
+        buffer_action = [
+          {:buffer, {:output, wrap_into_buffer(au, pts, dts, state.output_alignment)}}
+        ]
+
+        {actions_acc ++ sps_actions ++ buffer_action, cnt + 1, profile}
       end)
 
     state = %{state | profile: profile, au_counter: au_counter}
@@ -237,7 +255,12 @@ defmodule Membrane.H265.Parser do
         {[], profile}
 
       sps_nalu ->
-        fmt = Format.from_sps(sps_nalu, framerate: state.framerate)
+        fmt =
+          Format.from_sps(sps_nalu,
+            framerate: state.framerate,
+            output_alignment: state.output_alignment
+          )
+
         {[stream_format: {:output, fmt}], fmt.profile}
     end
   end
@@ -261,8 +284,8 @@ defmodule Membrane.H265.Parser do
     {buffer_pts, buffer_dts}
   end
 
-  defp wrap_into_buffer(access_unit, pts, dts) do
-    metadata = prepare_metadata(access_unit)
+  defp wrap_into_buffer(access_unit, pts, dts, :au) do
+    metadata = prepare_au_metadata(access_unit)
 
     buffer =
       access_unit
@@ -276,8 +299,16 @@ defmodule Membrane.H265.Parser do
     buffer
   end
 
-  defp prepare_metadata(nalus) do
-    is_keyframe = Enum.any?(nalus, fn nalu -> nalu.type in NALuTypes.irap_nalus() end)
+  defp wrap_into_buffer(access_unit, pts, dts, :nalu) do
+    access_unit
+    |> Enum.zip(prepare_nalus_metadata(access_unit))
+    |> Enum.map(fn {nalu, metadata} ->
+      %Buffer{payload: nalu.payload, metadata: metadata, pts: pts, dts: dts}
+    end)
+  end
+
+  defp prepare_au_metadata(nalus) do
+    keyframe? = Enum.any?(nalus, &keyframe?/1)
 
     nalus =
       nalus
@@ -303,7 +334,7 @@ defmodule Membrane.H265.Parser do
 
         metadata =
           if i == 0 do
-            put_in(metadata, [:metadata, :h265, :new_access_unit], %{key_frame?: is_keyframe})
+            put_in(metadata, [:metadata, :h265, :new_access_unit], %{key_frame?: keyframe?})
           else
             metadata
           end
@@ -312,8 +343,24 @@ defmodule Membrane.H265.Parser do
       end)
       |> elem(0)
 
-    %{h265: %{key_frame?: is_keyframe, nalus: nalus}}
+    %{h265: %{key_frame?: keyframe?, nalus: nalus}}
   end
+
+  defp prepare_nalus_metadata(nalus) do
+    keyframe? = Enum.any?(nalus, &keyframe?/1)
+
+    Enum.with_index(nalus)
+    |> Enum.map(fn {nalu, i} ->
+      %{h265: %{type: nalu.type}}
+      |> Bunch.then_if(
+        i == 0,
+        &put_in(&1, [:h265, :new_access_unit], %{key_frame?: keyframe?})
+      )
+      |> Bunch.then_if(i == length(nalus) - 1, &put_in(&1, [:h265, :end_access_unit], true))
+    end)
+  end
+
+  defp keyframe?(nalu), do: nalu.type in NALuTypes.irap_nalus()
 
   defp stream_format_sent?(actions, %{pads: %{output: %{stream_format: nil}}}),
     do: Enum.any?(actions, &match?({:stream_format, _stream_format}, &1))
