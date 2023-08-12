@@ -11,6 +11,8 @@ defmodule Membrane.H265.Parser.AUSplitter do
   `:vps`, `:sps`, `:pps`, `:aud`, `:prefix_sei` is encountered or when the vcl nal unit type is <= 9 or
   between 16 and 25 and has `first_slice_segment_in_pic_flag` is set.
   """
+  require Logger
+
   alias Membrane.H265.Parser.{NALu, NALuTypes}
 
   @typedoc """
@@ -19,13 +21,14 @@ defmodule Membrane.H265.Parser.AUSplitter do
   @opaque t :: %__MODULE__{
             nalus_acc: [NALu.t()],
             fsm_state: :first | :second,
-            previous_first_coded_picture_nalu: NALu.t() | nil,
+            previous_nalu: NALu.t() | nil,
             access_units_to_output: [access_unit_t()]
           }
+
   @enforce_keys [
     :nalus_acc,
     :fsm_state,
-    :previous_first_coded_picture_nalu,
+    :previous_nalu,
     :access_units_to_output
   ]
   defstruct @enforce_keys
@@ -39,12 +42,14 @@ defmodule Membrane.H265.Parser.AUSplitter do
     %__MODULE__{
       nalus_acc: [],
       fsm_state: :first,
-      previous_first_coded_picture_nalu: nil,
+      previous_nalu: nil,
       access_units_to_output: []
     }
   end
 
-  @non_vcl_nalus [:vps, :sps, :pps, :aud, :prefix_sei]
+  @vcl_nalus NALuTypes.vcl_nalu_types()
+  @non_vcl_nalus_at_au_beginning [:vps, :sps, :pps, :prefix_sei]
+  @non_vcl_nalus_at_au_end [:fd, :eos, :eob, :suffix_sei]
 
   @typedoc """
   A type representing an access unit - a list of logically associated NAL units.
@@ -79,26 +84,30 @@ defmodule Membrane.H265.Parser.AUSplitter do
             state
             | nalus_acc: state.nalus_acc ++ [first_nalu],
               fsm_state: :second,
-              previous_first_coded_picture_nalu: first_nalu
+              previous_nalu: first_nalu
           }
         )
 
-      first_nalu.type in @non_vcl_nalus ->
+      (first_nalu.type == :aud and state.nalus_acc == []) or
+        first_nalu.type in @non_vcl_nalus_at_au_beginning or
+        NALu.int_type(first_nalu) in 41..44 or
+          NALu.int_type(first_nalu) in 48..55 ->
         split(
           rest_nalus,
           %__MODULE__{state | nalus_acc: state.nalus_acc ++ [first_nalu]}
         )
 
       true ->
-        raise "AUSplitter: Improper transition"
+        Logger.warning("AUSplitter: Improper transition")
+        return(state)
     end
   end
 
   def split([first_nalu | rest_nalus], %{fsm_state: :second} = state) do
-    first_vcl_nalu_in_access_unit = state.previous_first_coded_picture_nalu
+    previous_nalu = state.previous_nalu
 
     cond do
-      first_nalu.type in @non_vcl_nalus ->
+      first_nalu.type == :aud or first_nalu.type in @non_vcl_nalus_at_au_beginning ->
         split(
           rest_nalus,
           %__MODULE__{
@@ -115,24 +124,36 @@ defmodule Membrane.H265.Parser.AUSplitter do
           %__MODULE__{
             state
             | nalus_acc: [first_nalu],
-              previous_first_coded_picture_nalu: first_nalu,
+              previous_nalu: first_nalu,
               access_units_to_output: state.access_units_to_output ++ [state.nalus_acc]
           }
         )
 
-      first_nalu.type == first_vcl_nalu_in_access_unit.type or
-          first_nalu.type in [:fd, :suffix_sei, :eos, :eob] ->
+      first_nalu.type == previous_nalu.type or
+        first_nalu.type in @non_vcl_nalus_at_au_end or
+        NALu.int_type(first_nalu) in 45..47 or
+          NALu.int_type(first_nalu) in 56..63 ->
         split(
           rest_nalus,
-          %__MODULE__{state | nalus_acc: state.nalus_acc ++ [first_nalu]}
+          %__MODULE__{
+            state
+            | nalus_acc: state.nalus_acc ++ [first_nalu],
+              previous_nalu: first_nalu
+          }
         )
 
       true ->
-        raise "AUSplitter: Improper transition"
+        Logger.warning("AUSplitter: Improper transition")
+        return(state)
     end
   end
 
   def split([], state) do
+    {state.access_units_to_output |> Enum.filter(&(&1 != [])),
+     %__MODULE__{state | access_units_to_output: []}}
+  end
+
+  defp return(state) do
     {state.access_units_to_output |> Enum.filter(&(&1 != [])),
      %__MODULE__{state | access_units_to_output: []}}
   end
@@ -150,7 +171,7 @@ defmodule Membrane.H265.Parser.AUSplitter do
   end
 
   defp access_unit_first_slice_segment?(nalu) do
-    nalu.type in NALuTypes.vcl_nalu_types() and
+    nalu.type in @vcl_nalus and
       nalu.parsed_fields.first_slice_segment_in_pic_flag == 1
   end
 end
