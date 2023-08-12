@@ -27,4 +27,7 @@ defmodule Membrane.H265.Parser.NALu do
 
   @enforce_keys [:parsed_fields, :prefix_length, :type, :payload, :status]
   defstruct @enforce_keys
+
+  @spec int_type(t()) :: non_neg_integer()
+  def int_type(%__MODULE__{parsed_fields: parsed_fields}), do: parsed_fields.nal_unit_type
 end

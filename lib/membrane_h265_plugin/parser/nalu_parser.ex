@@ -106,7 +106,7 @@ defmodule Membrane.H265.Parser.NALuParser do
         if type in NALuTypes.vcl_nalu_types() do
           SchemeParser.parse_with_scheme(payload, Schemes.Slice, state)
         else
-          {%{}, state}
+          {SchemeParser.get_local_state(state), state}
         end
     end
   end
