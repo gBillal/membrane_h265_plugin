@@ -255,7 +255,12 @@ defmodule Membrane.H265.Parser do
         {[], profile}
 
       sps_nalu ->
-        fmt = Format.from_sps(sps_nalu, framerate: state.framerate)
+        fmt =
+          Format.from_sps(sps_nalu,
+            framerate: state.framerate,
+            output_alignment: state.output_alignment
+          )
+
         {[stream_format: {:output, fmt}], fmt.profile}
     end
   end
