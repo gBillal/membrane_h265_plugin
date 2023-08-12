@@ -1,15 +1,11 @@
 defmodule Membrane.H265.Parser.AUSplitter do
   @moduledoc """
-  Module providing functionalities to divide the binary
-  h265 stream into access units.
+  Module providing functionalities to group H265 NAL units
+  into access units.
 
-  The access unit splitter's behaviour is based on *"7.4.2.4.4
-  Order of NAL units and coded pictures and association to access units"*
+  The access unit splitter's behaviour is based on section **7.4.2.4.4**
+  *"Order of NAL units and coded pictures and association to access units"*
   of the *"ITU-T Rec. H.265 (08/2021)"* specification.
-
-  The current implementation splits the nalu into access units either when a non vcl nalu with type
-  `:vps`, `:sps`, `:pps`, `:aud`, `:prefix_sei` is encountered or when the vcl nal unit type is <= 9 or
-  between 16 and 25 and has `first_slice_segment_in_pic_flag` is set.
   """
   require Logger
 
