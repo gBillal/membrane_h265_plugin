@@ -19,6 +19,8 @@ defmodule Membrane.H265.Parser do
   * Receiving `%Membrane.RemoteStream{type: :bytestream}` results in the parser mode being set to `:bytestream`
   * Receiving `%Membrane.H265.RemoteStream{alignment: :nalu}` results in the parser mode being set to `:nalu_aligned`
   * Receiving `%Membrane.H265.RemoteStream{alignment: :au}` results in the parser mode being set to `:au_aligned`
+  * Receiving `%Membrane.H265{alignment: :nalu}` results in the parser mode being set to `:nalu_aligned`.
+  * Receiving `%Membrane.H265{alignment: :au}` results in the parser mode being set to `:au_aligned`.
   """
 
   use Membrane.Filter
@@ -79,7 +81,7 @@ defmodule Membrane.H265.Parser do
                 description: """
                 Framerate of the video, represented as a tuple consisting of a numerator and the
                 denominator.
-                Its value will be sent inside the output Membrane.H265 stream format.
+                Its value will be sent inside the output `Membrane.H265` stream format.
                 """
               ],
               output_alignment: [
@@ -89,7 +91,6 @@ defmodule Membrane.H265.Parser do
                 Alignment of the buffers produced as an output of the parser.
                 If set to `:au`, each output buffer will be a single access unit.
                 Otherwise, if set to `:nalu`, each output buffer will be a single NAL unit.
-                Defaults to `:au`.
                 """
               ]
 
