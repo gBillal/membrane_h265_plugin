@@ -31,6 +31,13 @@ defmodule Membrane.H265.Parser do
   alias Membrane.H265.Parser.{AUSplitter, Format, NALuParser, NALuSplitter, NALuTypes}
   alias Membrane.{Buffer, RemoteStream}
 
+  @typedoc """
+  Type referencing `Membrane.H265.stream_structure` type, in case of `:hvc1` and `:hev1`
+  stream structure, it contains an information about the size of each NALU's prefix describing
+  their length.
+  """
+  @type stream_structure :: :annexb | {:hvc1 | :hev1, nalu_length_size :: pos_integer()}
+
   @nal_prefix <<0, 0, 0, 1>>
 
   def_input_pad :input,
