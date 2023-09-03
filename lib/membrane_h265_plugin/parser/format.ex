@@ -20,12 +20,13 @@ defmodule Membrane.H265.Parser.Format do
   """
   @spec from_sps(
           sps_nalu :: H265.Parser.NALu.t(),
+          output_raw_stream_structure :: H264.stream_structure(),
           options_fields :: [
             framerate: {pos_integer(), pos_integer()},
             output_alignment: :au | :nalu
           ]
         ) :: H265.t()
-  def from_sps(sps_nalu, options_fields) do
+  def from_sps(sps_nalu, output_raw_stream_format, options_fields) do
     sps = sps_nalu.parsed_fields
 
     {sub_width_c, sub_height_c} =
@@ -55,7 +56,8 @@ defmodule Membrane.H265.Parser.Format do
       profile: profile,
       framerate: Keyword.get(options_fields, :framerate),
       alignment: Keyword.get(options_fields, :output_alignment),
-      nalu_in_metadata?: true
+      nalu_in_metadata?: true,
+      stream_structure: output_raw_stream_format
     }
   end
 

@@ -6,6 +6,7 @@ defmodule Membrane.H265.Parser.DecoderConfigurationRecord do
   """
 
   alias Membrane.H265.Parser
+  alias Membrane.H265.Parser.NALu
 
   @enforce_keys [
     :vpss,
@@ -44,31 +45,31 @@ defmodule Membrane.H265.Parser.DecoderConfigurationRecord do
   @doc """
   Generates a DCR based on given PPSs, SPSs and VPSs.
   """
-  @spec generate([binary()], [binary()], [binary()], Parser.stream_structure()) :: binary() | nil
+  @spec generate([NALu.t()], [NALu.t()], [NALu.t()], Parser.stream_structure()) :: binary() | nil
   def generate(_vpss, [], _ppss, _stream_structure) do
     nil
   end
 
   def generate(vpss, spss, ppss, {avc, nalu_length_size}) do
-    {%{
-       parsed_fields: %{
-         profile_space: profile_space,
-         tier_flag: tier_flag,
-         profile_idc: profile_idc,
-         profile_compatibility_flag: profile_compatibility_flag,
-         progressive_source_flag: progressive_source_flag,
-         interlaced_source_flag: interlaced_source_flag,
-         non_packed_constraint_flag: non_packed_constraint_flag,
-         frame_only_constraint_flag: frame_only_constraint_flag,
-         reserved_zero_44bits: reserved_zero_44bits,
-         level_idc: level_idc,
-         chroma_format_idc: chroma_format_idc,
-         bit_depth_luma_minus8: bit_depth_luma_minus8,
-         bit_depth_chroma_minus8: bit_depth_chroma_minus8
-       }
-     },
-     _} =
-      Parser.NALuParser.parse(<<0, 0, 1, List.last(spss)::binary>>, Parser.NALuParser.new())
+    %NALu{
+      parsed_fields: %{
+        profile_space: profile_space,
+        tier_flag: tier_flag,
+        profile_idc: profile_idc,
+        profile_compatibility_flag: profile_compatibility_flag,
+        progressive_source_flag: progressive_source_flag,
+        interlaced_source_flag: interlaced_source_flag,
+        non_packed_constraint_flag: non_packed_constraint_flag,
+        frame_only_constraint_flag: frame_only_constraint_flag,
+        reserved_zero_44bits: reserved_zero_44bits,
+        level_idc: level_idc,
+        chroma_format_idc: chroma_format_idc,
+        bit_depth_luma_minus8: bit_depth_luma_minus8,
+        bit_depth_chroma_minus8: bit_depth_chroma_minus8
+      }
+    } = List.last(spss)
+
+    vpss = Enum.map(vpss, & &1.payload)
 
     common_config =
       <<1, profile_space::2, tier_flag::1, profile_idc::5, profile_compatibility_flag::32,
@@ -90,7 +91,7 @@ defmodule Membrane.H265.Parser.DecoderConfigurationRecord do
 
   defp encode_parameter_sets(pss, nalu_type) do
     <<0::2, nalu_type::6, length(pss)::16>> <>
-      Enum.map_join(pss, &<<byte_size(&1)::16-integer, &1::binary>>)
+      Enum.map_join(pss, &<<byte_size(&1.payload)::16-integer, &1.payload::binary>>)
   end
 
   @spec remove_parameter_sets(binary()) :: binary()

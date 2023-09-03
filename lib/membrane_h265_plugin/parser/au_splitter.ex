@@ -18,7 +18,7 @@ defmodule Membrane.H265.Parser.AUSplitter do
             nalus_acc: [NALu.t()],
             fsm_state: :first | :second,
             previous_nalu: NALu.t() | nil,
-            access_units_to_output: [access_unit_t()]
+            access_units_to_output: [access_unit()]
           }
 
   @enforce_keys [
@@ -50,7 +50,7 @@ defmodule Membrane.H265.Parser.AUSplitter do
   @typedoc """
   A type representing an access unit - a list of logically associated NAL units.
   """
-  @type access_unit_t() :: list(NALu.t())
+  @type access_unit() :: list(NALu.t())
 
   # split/2 defines a finite state machine with two states: :first and :second.
   # The state :first describes the state before reaching the primary coded picture NALu of a given access unit.
@@ -68,13 +68,25 @@ defmodule Membrane.H265.Parser.AUSplitter do
   describes the state after processing the first segment of the coded picture of a given
   access unit.
   """
-  @spec split(list(NALu.t()), t()) :: {list(access_unit_t()), t()}
-  def split(nalus, state)
+  @spec split([NALu.t()], boolean(), t()) :: {[access_unit()], t()}
+  def split(nalus, assume_au_aligned \\ false, state) do
+    state = do_split(nalus, state)
 
-  def split([first_nalu | rest_nalus], %{fsm_state: :first} = state) do
+    {aus, state} =
+      if assume_au_aligned do
+        {state.access_units_to_output ++ [state.nalus_acc],
+         %__MODULE__{state | access_units_to_output: [], nalus_acc: []}}
+      else
+        {state.access_units_to_output, %__MODULE__{state | access_units_to_output: []}}
+      end
+
+    {Enum.reject(aus, &Enum.empty?/1), state}
+  end
+
+  defp do_split([first_nalu | rest_nalus], %{fsm_state: :first} = state) do
     cond do
       access_unit_first_slice_segment?(first_nalu) ->
-        split(
+        do_split(
           rest_nalus,
           %__MODULE__{
             state
@@ -88,23 +100,23 @@ defmodule Membrane.H265.Parser.AUSplitter do
         first_nalu.type in @non_vcl_nalus_at_au_beginning or
         NALu.int_type(first_nalu) in 41..44 or
           NALu.int_type(first_nalu) in 48..55 ->
-        split(
+        do_split(
           rest_nalus,
           %__MODULE__{state | nalus_acc: state.nalus_acc ++ [first_nalu]}
         )
 
       true ->
         Logger.warning("AUSplitter: Improper transition")
-        return(state)
+        do_split(rest_nalus, state)
     end
   end
 
-  def split([first_nalu | rest_nalus], %{fsm_state: :second} = state) do
+  defp do_split([first_nalu | rest_nalus], %{fsm_state: :second} = state) do
     previous_nalu = state.previous_nalu
 
     cond do
       first_nalu.type == :aud or first_nalu.type in @non_vcl_nalus_at_au_beginning ->
-        split(
+        do_split(
           rest_nalus,
           %__MODULE__{
             state
@@ -115,7 +127,7 @@ defmodule Membrane.H265.Parser.AUSplitter do
         )
 
       access_unit_first_slice_segment?(first_nalu) ->
-        split(
+        do_split(
           rest_nalus,
           %__MODULE__{
             state
@@ -129,7 +141,7 @@ defmodule Membrane.H265.Parser.AUSplitter do
         first_nalu.type in @non_vcl_nalus_at_au_end or
         NALu.int_type(first_nalu) in 45..47 or
           NALu.int_type(first_nalu) in 56..63 ->
-        split(
+        do_split(
           rest_nalus,
           %__MODULE__{
             state
@@ -140,34 +152,16 @@ defmodule Membrane.H265.Parser.AUSplitter do
 
       true ->
         Logger.warning("AUSplitter: Improper transition")
-        return(state)
+        do_split(rest_nalus, state)
     end
   end
 
-  def split([], state) do
-    {state.access_units_to_output |> Enum.filter(&(&1 != [])),
-     %__MODULE__{state | access_units_to_output: []}}
-  end
-
-  defp return(state) do
-    {state.access_units_to_output |> Enum.filter(&(&1 != [])),
-     %__MODULE__{state | access_units_to_output: []}}
-  end
-
-  @doc """
-  Returns a list of NAL units which are hold in access unit splitter's state accumulator
-  and sets that accumulator empty.
-
-  These NAL units aren't proved to form a new access units and that is why they haven't yet been
-  output by `Membrane.H265.Parser.AUSplitter.split/2`.
-  """
-  @spec flush(t()) :: {list(NALu.t()), t()}
-  def flush(state) do
-    {state.nalus_acc, %{state | nalus_acc: []}}
+  defp do_split([], state) do
+    state
   end
 
   defp access_unit_first_slice_segment?(nalu) do
     nalu.type in @vcl_nalus and
-      nalu.parsed_fields.first_slice_segment_in_pic_flag == 1
+      nalu.parsed_fields[:first_slice_segment_in_pic_flag] == 1
   end
 end

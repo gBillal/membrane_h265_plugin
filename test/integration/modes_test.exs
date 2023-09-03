@@ -20,38 +20,38 @@ defmodule Membrane.H265.ModesTest do
   end
 
   defp prepare_buffers(binary, :nalu_aligned) do
-    {nalus_payloads, nalu_splitter} = NALuSplitter.split(binary, NALuSplitter.new())
-    {last_nalu_payload, _nalu_splitter} = NALuSplitter.flush(nalu_splitter)
-    nalus_payloads = nalus_payloads ++ [last_nalu_payload]
-
-    {nalus, _nalu_parser} =
-      Enum.map_reduce(nalus_payloads, NALuParser.new(), &NALuParser.parse(&1, &2))
-
-    {aus, au_splitter} = nalus |> AUSplitter.split(AUSplitter.new())
-    {last_au, _au_splitter} = AUSplitter.flush(au_splitter)
-    aus = aus ++ [last_au]
+    {nalus_payloads, _nalu_splitter} = NALuSplitter.split(binary, true, NALuSplitter.new())
+    {nalus, _nalu_parser} = NALuParser.parse_nalus(nalus_payloads, NALuParser.new())
+    {aus, _au_splitter} = AUSplitter.split(nalus, true, AUSplitter.new())
 
     Enum.map_reduce(aus, 0, fn au, ts ->
-      {for(nalu <- au, do: %Membrane.Buffer{payload: nalu.payload, pts: ts, dts: ts}), ts + 1}
+      {for(
+         nalu <- au,
+         do: %Membrane.Buffer{
+           payload: NALuParser.get_prefixed_nalu_payload(nalu, :annexb),
+           pts: ts,
+           dts: ts
+         }
+       ), ts + 1}
     end)
     |> elem(0)
     |> Enum.flat_map(& &1)
   end
 
   defp prepare_buffers(binary, :au_aligned) do
-    {nalus_payloads, nalu_splitter} = NALuSplitter.split(binary, NALuSplitter.new())
-    {last_nalu_payload, _nalu_splitter} = NALuSplitter.flush(nalu_splitter)
-    nalus_payloads = nalus_payloads ++ [last_nalu_payload]
-
-    {nalus, _nalu_parser} =
-      Enum.map_reduce(nalus_payloads, NALuParser.new(), &NALuParser.parse(&1, &2))
-
-    {aus, au_splitter} = nalus |> AUSplitter.split(AUSplitter.new())
-    {last_au, _au_splitter} = AUSplitter.flush(au_splitter)
-    aus = aus ++ [last_au]
+    {nalus_payloads, _nalu_splitter} = NALuSplitter.split(binary, true, NALuSplitter.new())
+    {nalus, _nalu_parser} = NALuParser.parse_nalus(nalus_payloads, NALuParser.new())
+    {aus, _au_splitter} = AUSplitter.split(nalus, true, AUSplitter.new())
 
     Enum.map_reduce(aus, 0, fn au, ts ->
-      {%Membrane.Buffer{payload: Enum.map_join(au, & &1.payload), pts: ts, dts: ts}, ts + 1}
+      {%Membrane.Buffer{
+         payload:
+           Enum.map_join(au, fn nalu ->
+             NALuParser.get_prefixed_nalu_payload(nalu, :annexb)
+           end),
+         pts: ts,
+         dts: ts
+       }, ts + 1}
     end)
     |> elem(0)
   end
