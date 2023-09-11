@@ -3,58 +3,15 @@ defmodule Membrane.H265.ModesTest do
   use ExUnit.Case
 
   import Membrane.ChildrenSpec
+  import Membrane.H265.Support.Common
   import Membrane.Testing.Assertions
 
   alias Membrane.Buffer
   alias Membrane.H265.Parser
-  alias Membrane.H265.Parser.{AUSplitter, NALuParser, NALuSplitter}
   alias Membrane.H265.Support.TestSource
   alias Membrane.Testing.{Pipeline, Sink}
 
   @h265_input_file "test/fixtures/input-8-2K.h265"
-  defp prepare_buffers(binary, :bytestream) do
-    buffers =
-      :binary.bin_to_list(binary) |> Enum.chunk_every(4000) |> Enum.map(&:binary.list_to_bin(&1))
-
-    Enum.map(buffers, &%Membrane.Buffer{payload: &1})
-  end
-
-  defp prepare_buffers(binary, :nalu_aligned) do
-    {nalus_payloads, _nalu_splitter} = NALuSplitter.split(binary, true, NALuSplitter.new())
-    {nalus, _nalu_parser} = NALuParser.parse_nalus(nalus_payloads, NALuParser.new())
-    {aus, _au_splitter} = AUSplitter.split(nalus, true, AUSplitter.new())
-
-    Enum.map_reduce(aus, 0, fn au, ts ->
-      {for(
-         nalu <- au,
-         do: %Membrane.Buffer{
-           payload: NALuParser.get_prefixed_nalu_payload(nalu, :annexb),
-           pts: ts,
-           dts: ts
-         }
-       ), ts + 1}
-    end)
-    |> elem(0)
-    |> Enum.flat_map(& &1)
-  end
-
-  defp prepare_buffers(binary, :au_aligned) do
-    {nalus_payloads, _nalu_splitter} = NALuSplitter.split(binary, true, NALuSplitter.new())
-    {nalus, _nalu_parser} = NALuParser.parse_nalus(nalus_payloads, NALuParser.new())
-    {aus, _au_splitter} = AUSplitter.split(nalus, true, AUSplitter.new())
-
-    Enum.map_reduce(aus, 0, fn au, ts ->
-      {%Membrane.Buffer{
-         payload:
-           Enum.map_join(au, fn nalu ->
-             NALuParser.get_prefixed_nalu_payload(nalu, :annexb)
-           end),
-         pts: ts,
-         dts: ts
-       }, ts + 1}
-    end)
-    |> elem(0)
-  end
 
   test "if the pts and dts are set to nil in :bytestream mode" do
     binary = File.read!(@h265_input_file)

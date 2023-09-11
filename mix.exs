@@ -42,7 +42,8 @@ defmodule Membrane.H265.Plugin.Mixfile do
       {:ex_doc, ">= 0.0.0", only: :dev, runtime: false},
       {:dialyxir, ">= 0.0.0", only: :dev, runtime: false},
       {:credo, ">= 0.0.0", only: :dev, runtime: false},
-      {:membrane_file_plugin, "~> 0.15.0", only: :test}
+      {:membrane_file_plugin, "~> 0.15.0", only: :test},
+      {:membrane_stream_plugin, "~> 0.3.1", only: :test}
     ]
   end
 

@@ -92,6 +92,10 @@ defmodule Membrane.H265.ProcessAllTest do
       perform_test("60-1920x1080", ctx.tmp_dir, 1000)
     end
 
+    test "process all 300 98p frames with conformance window", ctx do
+      perform_test("300-98x58-conformance-window", ctx.tmp_dir, 1000)
+    end
+
     test "process all 8 2K frames", ctx do
       # The bytestream contains AUD nalus and each access unit
       # has multiple slices

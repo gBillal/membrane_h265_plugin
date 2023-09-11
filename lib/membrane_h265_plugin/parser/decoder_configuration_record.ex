@@ -18,6 +18,8 @@ defmodule Membrane.H265.Parser.DecoderConfigurationRecord do
     :profile_compatibility_flags,
     :constraint_indicator_flags,
     :level_idc,
+    :temporal_id_nested,
+    :num_temporal_layers,
     :chroma_format_idc,
     :bit_depth_luma_minus8,
     :bit_depth_chroma_minus8,
@@ -39,6 +41,8 @@ defmodule Membrane.H265.Parser.DecoderConfigurationRecord do
           chroma_format_idc: non_neg_integer(),
           bit_depth_luma_minus8: non_neg_integer(),
           bit_depth_chroma_minus8: non_neg_integer(),
+          temporal_id_nested: non_neg_integer(),
+          num_temporal_layers: non_neg_integer(),
           nalu_length_size: non_neg_integer()
         }
 
@@ -65,19 +69,19 @@ defmodule Membrane.H265.Parser.DecoderConfigurationRecord do
         level_idc: level_idc,
         chroma_format_idc: chroma_format_idc,
         bit_depth_luma_minus8: bit_depth_luma_minus8,
-        bit_depth_chroma_minus8: bit_depth_chroma_minus8
+        bit_depth_chroma_minus8: bit_depth_chroma_minus8,
+        temporal_id_nesting_flag: temporal_id_nested,
+        max_sub_layers_minus1: num_temporal_layers
       }
     } = List.last(spss)
-
-    vpss = Enum.map(vpss, & &1.payload)
 
     common_config =
       <<1, profile_space::2, tier_flag::1, profile_idc::5, profile_compatibility_flag::32,
         progressive_source_flag::1, interlaced_source_flag::1, non_packed_constraint_flag::1,
         frame_only_constraint_flag::1, reserved_zero_44bits::44, level_idc, 0b1111::4, 0::12,
         0b111111::6, 0::2, 0b111111::6, chroma_format_idc::2, 0b11111::5,
-        bit_depth_luma_minus8::3, 0b11111::5, bit_depth_chroma_minus8::3, 0::22,
-        nalu_length_size - 1::2-integer>>
+        bit_depth_luma_minus8::3, 0b11111::5, bit_depth_chroma_minus8::3, 0::19,
+        num_temporal_layers + 1::2, temporal_id_nested::1, nalu_length_size - 1::2-integer>>
 
     cond do
       avc == :hvc1 ->
@@ -90,14 +94,8 @@ defmodule Membrane.H265.Parser.DecoderConfigurationRecord do
   end
 
   defp encode_parameter_sets(pss, nalu_type) do
-    <<0::2, nalu_type::6, length(pss)::16>> <>
+    <<2::2, nalu_type::6, length(pss)::16>> <>
       Enum.map_join(pss, &<<byte_size(&1.payload)::16-integer, &1.payload::binary>>)
-  end
-
-  @spec remove_parameter_sets(binary()) :: binary()
-  def remove_parameter_sets(dcr) do
-    <<dcr_head::binary-(8 * 22), _rest::binary>> = dcr
-    <<dcr_head::binary, 0::8>>
   end
 
   @doc """
@@ -110,12 +108,19 @@ defmodule Membrane.H265.Parser.DecoderConfigurationRecord do
           _min_spatial_segmentation_idc::12, 0b111111::6, _parallelism_type::2, 0b111111::6,
           chroma_format_idc::2, 0b11111::5, bit_depth_luma_minus8::3, 0b11111::5,
           bit_depth_chroma_minus8::3, _avg_frame_rate::16, _constant_frame_rate::2,
-          _num_temporal_layers::3, _temporal_id_nested::1, length_size_minus_one::2-integer,
-          _num_of_arrays::8, rest::bitstring>>
+          num_temporal_layers::3, temporal_id_nested::1, length_size_minus_one::2-integer,
+          num_of_arrays::8, rest::bitstring>>
       ) do
-    {vpss, rest} = parse_vpss(rest)
-    {spss, rest} = parse_spss(rest)
-    {ppss, _rest} = parse_ppss(rest)
+    {vpss, spss, ppss} =
+      if num_of_arrays > 0 do
+        {vpss, rest} = parse_pss(rest, 32)
+        {spss, rest} = parse_pss(rest, 33)
+        {ppss, _rest} = parse_pss(rest, 34)
+
+        {vpss, spss, ppss}
+      else
+        {[], [], []}
+      end
 
     %__MODULE__{
       vpss: vpss,
@@ -127,6 +132,8 @@ defmodule Membrane.H265.Parser.DecoderConfigurationRecord do
       profile_compatibility_flags: profile_compatibility_flags,
       constraint_indicator_flags: constraint_indicator_flags,
       level_idc: level_idc,
+      temporal_id_nested: temporal_id_nested,
+      num_temporal_layers: num_temporal_layers,
       chroma_format_idc: chroma_format_idc,
       bit_depth_luma_minus8: bit_depth_luma_minus8,
       bit_depth_chroma_minus8: bit_depth_chroma_minus8,
@@ -136,16 +143,8 @@ defmodule Membrane.H265.Parser.DecoderConfigurationRecord do
 
   def parse(_data), do: {:error, :unknown_pattern}
 
-  defp parse_vpss(<<_reserved::2, 32::6, num_of_vpss::16, rest::bitstring>>) do
-    do_parse_array(num_of_vpss, rest)
-  end
-
-  defp parse_spss(<<_reserved::2, 33::6, num_of_spss::16, rest::bitstring>>) do
-    do_parse_array(num_of_spss, rest)
-  end
-
-  defp parse_ppss(<<_reserved::2, 34::6, num_of_spss::16, rest::bitstring>>) do
-    do_parse_array(num_of_spss, rest)
+  defp parse_pss(<<_reserved::2, type::6, num_of_pss::16, rest::bitstring>>, type) do
+    do_parse_array(num_of_pss, rest)
   end
 
   defp do_parse_array(amount, rest, acc \\ [])

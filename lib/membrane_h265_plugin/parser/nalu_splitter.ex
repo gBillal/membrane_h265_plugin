@@ -91,16 +91,4 @@ defmodule Membrane.H265.Parser.NALuSplitter do
       [nalu | get_complete_nalus_list(rest, {hevc, nalu_length_size})]
     end
   end
-
-  @doc """
-  Flushes the payload out of the splitter state.
-
-  That function gets the payload from the inner state
-  of the splitter and sets the payload in the inner state
-  clean.
-  """
-  @spec flush(t()) :: {binary(), t()}
-  def flush(state) do
-    {state.unparsed_payload, %{state | unparsed_payload: <<>>}}
-  end
 end

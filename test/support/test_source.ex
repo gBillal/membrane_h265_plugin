@@ -3,7 +3,8 @@ defmodule Membrane.H265.Support.TestSource do
 
   use Membrane.Source
 
-  def_options mode: []
+  def_options mode: [],
+              output_raw_stream_structure: [default: :annexb]
 
   def_output_pad :output,
     mode: :push,
@@ -15,7 +16,7 @@ defmodule Membrane.H265.Support.TestSource do
 
   @impl true
   def handle_init(_ctx, opts) do
-    {[], %{mode: opts.mode}}
+    {[], %{mode: opts.mode, output_raw_stream_structure: opts.output_raw_stream_structure}}
   end
 
   @impl true
@@ -27,9 +28,14 @@ defmodule Membrane.H265.Support.TestSource do
   def handle_playing(_ctx, state) do
     stream_format =
       case state.mode do
-        :bytestream -> %Membrane.RemoteStream{type: :bytestream}
-        :nalu_aligned -> %Membrane.H265{alignment: :nalu}
-        :au_aligned -> %Membrane.H265{alignment: :au}
+        :bytestream ->
+          %Membrane.RemoteStream{type: :bytestream}
+
+        :nalu_aligned ->
+          %Membrane.H265{alignment: :nalu, stream_structure: state.output_raw_stream_structure}
+
+        :au_aligned ->
+          %Membrane.H265{alignment: :au, stream_structure: state.output_raw_stream_structure}
       end
 
     {[stream_format: {:output, stream_format}], state}

@@ -35,7 +35,6 @@ defmodule Membrane.H265.Parser.Format do
         1 -> {2, 2}
         2 -> {2, 1}
         3 -> {1, 1}
-        _other -> {nil, nil}
       end
 
     {width, height} =
