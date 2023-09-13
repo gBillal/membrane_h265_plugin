@@ -6,6 +6,7 @@ defmodule Membrane.H265.Parser.NALuParser.Schemes.SPS do
   import Bitwise
 
   alias Membrane.H265
+  alias Membrane.H265.Common.ExpGolombConverter
   alias Membrane.H265.Parser.NALuParser.Schemes.Common
 
   @impl true
@@ -80,17 +81,16 @@ defmodule Membrane.H265.Parser.NALuParser.Schemes.SPS do
             field: {:pcm_loop_filter_disabled_flag, :u1}
           },
           field: {:num_short_term_ref_pic_sets, :ue},
-          for: {
-            [iterator: :i, from: 0, to: {&(&1 - 1), [:num_short_term_ref_pic_sets]}],
-            st_ref_pic_set()
-          },
+          execute: &st_ref_pic_set/3,
           field: {:long_term_ref_pics_present_flag, :u1},
           if: {
             {&(&1 == 1), [:long_term_ref_pics_present_flag]},
             field: {:num_long_term_ref_pics_sps, :ue},
             for: {
               [iterator: :j, from: 0, to: {&(&1 - 1), [:num_long_term_ref_pics_sps]}],
-              field: {:lt_ref_pic_poc_lsb_sps, :uv}, field: {:used_by_curr_pic_lt_sps_flag, :u1}
+              field:
+                {:lt_ref_pic_poc_lsb_sps, {:uv, &(&1 + 4), [:log2_max_pic_order_cnt_lsb_minus4]}},
+              field: {:used_by_curr_pic_lt_sps_flag, :u1}
             }
           },
           field: {:temporal_mvp_enabled_flag, :u1},
@@ -152,53 +152,97 @@ defmodule Membrane.H265.Parser.NALuParser.Schemes.SPS do
     end
   end
 
-  defp st_ref_pic_set() do
-    [
-      execute: fn payload, state, _iterators ->
-        {payload,
-         put_in(state, [:__local__, :inter_ref_pic_set_prediction_flag], %{state.__local__.i => 0})}
-      end,
-      if: {
-        {&(&1 != 0), [:i]},
-        field: {:inter_ref_pic_set_prediction_flag, :u1}
-      },
-      if: {
-        {&(&1[&2] == 1), [:inter_ref_pic_set_prediction_flag, :i]},
-        if: {
-          {&(&1 == &2), [:num_short_term_ref_pic_sets, :i]},
-          field: {:delta_idx_minus1, :ue}
-        },
-        field: {:delta_rps_sign, :u1},
-        field: {:abs_delta_rps_minus1, :u1},
-        for: {
-          [
-            iterator: :j,
-            from: 0,
-            to:
-              {&(&1[&3 - (&4[&3] + 1)] + &2[&3 - (&4[&3] + 1)]),
-               [:num_negative_pics, :num_positive_pics, :i, :delta_idx_minus1]}
-          ],
-          field: {:used_by_curr_pic_flag, :u1},
-          if: {
-            {&(&1[&2][&3] == 0), [:used_by_curr_pic_flag, :i, :j]},
-            field: {:use_delta_flag, :u1}
+  defp st_ref_pic_set(
+         payload,
+         %{__local__: %{num_short_term_ref_pic_sets: 0}} = state,
+         _iterators
+       ),
+       do: {payload, state}
+
+  defp st_ref_pic_set(payload, state, _iterators) do
+    {payload, ref_pic_set} =
+      Enum.reduce(0..(state.__local__.num_short_term_ref_pic_sets - 1), {payload, []}, fn idx,
+                                                                                          {payload,
+                                                                                           pic_ref_list} ->
+        {payload, inter_ref_pic_set_prediction_flag} =
+          if idx == 0 do
+            {payload, 0}
+          else
+            <<inter_ref_pic_set_prediction_flag::1, payload::bitstring>> = payload
+            {payload, inter_ref_pic_set_prediction_flag}
+          end
+
+        if inter_ref_pic_set_prediction_flag == 0 do
+          {num_negative_pics, payload} = ExpGolombConverter.to_integer(payload)
+          {num_positive_pics, payload} = ExpGolombConverter.to_integer(payload)
+
+          {payload, delta_poc_s0_minus1, used_by_curr_pic_s0_flag} =
+            read_delta_poc(payload, num_negative_pics)
+
+          {payload, delta_poc_s1_minus1, used_by_curr_pic_s1_flag} =
+            read_delta_poc(payload, num_positive_pics)
+
+          pic_ref = %{
+            num_negative_pics: num_negative_pics,
+            num_positive_pics: num_positive_pics,
+            delta_poc_s0_minus1: delta_poc_s0_minus1,
+            delta_poc_s1_minus1: delta_poc_s1_minus1,
+            used_by_curr_pic_s0_flag: used_by_curr_pic_s0_flag,
+            used_by_curr_pic_s1_flag: used_by_curr_pic_s1_flag
           }
-        }
-      },
-      if: {
-        {&(&1[&2] == 0), [:inter_ref_pic_set_prediction_flag, :i]},
-        field: {:num_negative_pics, :ue},
-        field: {:num_positive_pics, :ue},
-        for: {
-          [iterator: :j, from: 0, to: {&(&1 - 1), [:num_negative_pics]}],
-          field: {:delta_poc_s0_minus1, :ue}, field: {:used_by_curr_pic_s0_flag, :u1}
-        },
-        for: {
-          [iterator: :j, from: 0, to: {&(&1 - 1), [:num_positive_pics]}],
-          field: {:delta_poc_s1_minus1, :ue}, field: {:used_by_curr_pic_s1_flag, :u1}
-        }
-      }
-    ]
+
+          {payload, pic_ref_list ++ [pic_ref]}
+        else
+          <<delta_rps_sign::1, payload::bitstring>> = payload
+          {abs_delta_rps_minus1, payload} = ExpGolombConverter.to_integer(payload)
+
+          num_negative_pics = Enum.at(pic_ref_list, idx - 1).num_negative_pics
+          num_positive_pics = Enum.at(pic_ref_list, idx - 1).num_positive_pics
+
+          num_delta_pocs = num_negative_pics + num_positive_pics
+
+          {payload, used_by_curr_pic_flag, use_delta_flag} =
+            Enum.reduce(1..num_delta_pocs, {payload, [], []}, fn _idx,
+                                                                 {payload, used_by_curr_pic_list,
+                                                                  use_delta_flag_list} ->
+              <<used_by_curr_pic_flag::1, payload::bitstring>> = payload
+
+              {use_delta_flag, payload} =
+                if used_by_curr_pic_flag == 1 do
+                  {0, payload}
+                else
+                  <<use_delta_flag::1, payload::bitstring>> = payload
+                  {use_delta_flag, payload}
+                end
+
+              {payload, used_by_curr_pic_list ++ [used_by_curr_pic_flag],
+               use_delta_flag_list ++ [use_delta_flag]}
+            end)
+
+          pic_ref = %{
+            delta_rps_sign: delta_rps_sign,
+            abs_delta_rps_minus1: abs_delta_rps_minus1,
+            used_by_curr_pic_flag: used_by_curr_pic_flag,
+            use_delta_flag: use_delta_flag
+          }
+
+          {payload, pic_ref_list ++ [pic_ref]}
+        end
+      end)
+
+    {payload, put_in(state, [:__local__, :st_ref_pic_set], ref_pic_set)}
+  end
+
+  defp read_delta_poc(payload, 0), do: {payload, [], []}
+
+  defp read_delta_poc(payload, num_pictures) do
+    Enum.reduce(0..(num_pictures - 1), {payload, [], []}, fn _id,
+                                                             {payload, deltas, used_by_curr} ->
+      {delta_poc_s0_minus1, payload} = ExpGolombConverter.to_integer(payload)
+      <<used_by_curr_pic_s0_flag::1, payload::bitstring>> = payload
+
+      {payload, deltas ++ [delta_poc_s0_minus1], used_by_curr ++ [used_by_curr_pic_s0_flag]}
+    end)
   end
 
   defp vui_parameters() do
@@ -262,10 +306,10 @@ defmodule Membrane.H265.Parser.NALuParser.Schemes.SPS do
   end
 
   defp load_timing_info_from_vps(payload, state, _iterators) do
-    with false <- Map.get(state.__local__, :vui_timing_info_present_flag, false),
+    with 0 <- Map.get(state.__local__, :vui_timing_info_present_flag, 0),
          vps_id <- Map.get(state.__local__, :video_parameter_set_id),
          vps when vps != nil <- Map.get(state.__global__, {:vps, vps_id}),
-         true <- Map.get(vps, :timing_info_present_flag, false) do
+         1 <- Map.get(vps, :timing_info_present_flag, 0) do
       state =
         Map.merge(state, %{
           num_units_in_tick: vps.num_units_in_tick,
