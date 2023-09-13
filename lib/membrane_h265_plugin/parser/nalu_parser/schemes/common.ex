@@ -7,10 +7,7 @@ defmodule Membrane.H265.Parser.NALuParser.Schemes.Common do
       field: {:profile_space, :u2},
       field: {:tier_flag, :u1},
       field: {:profile_idc, :u5},
-      for: {
-        [iterator: :j, from: 0, to: 31],
-        field: {:profile_compatibility_flag, :u1}
-      },
+      field: {:profile_compatibility_flag, :u32},
       field: {:progressive_source_flag, :u1},
       field: {:interlaced_source_flag, :u1},
       field: {:non_packed_constraint_flag, :u1},

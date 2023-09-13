@@ -19,14 +19,17 @@ defmodule Membrane.H265.Parser.NALu do
   """
   @type t :: %__MODULE__{
           parsed_fields: %{atom() => any()},
-          prefix_length: pos_integer(),
+          stripped_prefix: binary(),
           type: Membrane.H265.Parser.NALuTypes.nalu_type(),
           payload: binary(),
-          status: :valid | :error
+          status: :valid | :error,
+          timestamps: timestamps()
         }
 
-  @enforce_keys [:parsed_fields, :prefix_length, :type, :payload, :status]
-  defstruct @enforce_keys
+  @type timestamps :: {pts :: integer() | nil, dts :: integer() | nil}
+
+  @enforce_keys [:parsed_fields, :stripped_prefix, :type, :payload, :status]
+  defstruct @enforce_keys ++ [timestamps: {nil, nil}]
 
   @spec int_type(t()) :: non_neg_integer()
   def int_type(%__MODULE__{parsed_fields: parsed_fields}), do: parsed_fields.nal_unit_type

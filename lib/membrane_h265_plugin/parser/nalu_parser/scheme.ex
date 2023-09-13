@@ -5,10 +5,10 @@ defmodule Membrane.H265.Parser.NALuParser.Scheme do
 
   # A NALu scheme is defining the internal structure of the NALu
   # and describes the fields which need to by fetched from the binary.
-  # The `Membrane.H264.Parser.SchemeParserScheme` behaviour defines a
+  # The `Membrane.H265.Parser.SchemeParserScheme` behaviour defines a
   # callback: `scheme/0`, which returns the description of NALu structure.
   # The syntax which can be used to describe the NALu scheme is designed to
-  # match the syntax forms used in *7.1.* chapter of the *"ITU-T Rec. H.264 (01/2012)"*.
+  # match the syntax forms used in *7.1.* chapter of the *"ITU-T Rec. H.265"*.
   # The scheme is read by the parser in an imperative manner, line by line.
   # The following statements are available:
   # * field: reads the appropriate number of bits, decodes the integer based on
@@ -19,7 +19,7 @@ defmodule Membrane.H265.Parser.NALuParser.Scheme do
   # * calculate: allows to add to the parser's state map the desired value,
   #   under the given key.
   # * execute: allows to perform the custom actions with the payload and state, can be
-  #   used to process the payload in a way which couldn't be acheived with the scheme syntax.
+  #   used to process the payload in a way which couldn't be achieved with the scheme syntax.
   # * save_as_global_state_t: saves the current parser state, concerning the NALu which is
   #   currently processed, in the map under the `:__global__` key in the state. Information
   #   from the saved state can be used while parsing the following NALus.

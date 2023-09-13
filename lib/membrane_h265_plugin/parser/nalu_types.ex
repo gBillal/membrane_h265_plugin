@@ -66,7 +66,7 @@ defmodule Membrane.H265.Parser.NALuTypes do
   @spec vcl_nalu_types() :: [nalu_type()]
   def vcl_nalu_types() do
     @nalu_types
-    |> Enum.filter(fn {type, _} -> type in 0..9 or type in 16..21 end)
+    |> Enum.filter(fn {type, _} -> type in 0..31 end)
     |> Enum.map(fn {_, name} -> name end)
   end
 

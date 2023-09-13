@@ -24,7 +24,8 @@ defmodule Membrane.H265.StreamFormatTest do
     "60-640x480" => {:main, 640, 480},
     "60-1920x1080" => {:main, 1920, 1080},
     "10-640x480-main10" => {:main_10, 640, 480},
-    "10-480x320-mainstillpicture" => {:main_still_picture, 480, 320}
+    "10-480x320-mainstillpicture" => {:main_still_picture, 480, 320},
+    "300-98x58-conformance-window" => {:main, 98, 58}
   }
 
   defp perform_test(filename, timeout) do
@@ -67,6 +68,10 @@ defmodule Membrane.H265.StreamFormatTest do
 
     test "read the proper stream format for: 10 320p frames with main still picture profile" do
       perform_test("10-480x320-mainstillpicture", 100)
+    end
+
+    test "read the proper stream format for: 300 98p frames with main profile and conformance window" do
+      perform_test("300-98x58-conformance-window", 100)
     end
   end
 end

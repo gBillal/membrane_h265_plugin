@@ -13,9 +13,9 @@ defmodule Membrane.H265.ProcessAllTest do
     structure = [
       child(:file_src, %Membrane.File.Source{chunk_size: 40_960, location: in_path})
       |> child(:parser, %H265.Parser{
-        vps: parameter_sets[:vps] || <<>>,
-        sps: parameter_sets[:sps] || <<>>,
-        pps: parameter_sets[:pps] || <<>>
+        vpss: parameter_sets[:vpss] || [],
+        spss: parameter_sets[:spss] || [],
+        ppss: parameter_sets[:ppss] || []
       })
       |> child(:sink, %Membrane.File.Sink{location: out_path})
     ]
@@ -33,7 +33,7 @@ defmodule Membrane.H265.ProcessAllTest do
     |> Enum.filter(fn
       <<0, 0, 1, 0::1, type::6, 0::1, _rest::binary>> when type in [32, 33, 34, 39] -> false
       <<0, 0, 0, 1, 0::1, type::6, 0::1, _rest::binary>> when type in [32, 33, 34, 39] -> false
-      _ -> true
+      _other -> true
     end)
     |> Enum.join()
   end
@@ -92,6 +92,10 @@ defmodule Membrane.H265.ProcessAllTest do
       perform_test("60-1920x1080", ctx.tmp_dir, 1000)
     end
 
+    test "process all 300 98p frames with conformance window", ctx do
+      perform_test("300-98x58-conformance-window", ctx.tmp_dir, 1000)
+    end
+
     test "process all 8 2K frames", ctx do
       # The bytestream contains AUD nalus and each access unit
       # has multiple slices
@@ -113,26 +117,7 @@ defmodule Membrane.H265.ProcessAllTest do
         "60-640x480-no-parameter-sets",
         ctx.tmp_dir,
         1000,
-        [vps: vps, sps: sps, pps: pps],
-        true
-      )
-
-      # Parameter sets with prefix
-      prefix = <<0, 0, 0, 1>>
-
-      perform_test(
-        "60-640x480-no-parameter-sets",
-        ctx.tmp_dir,
-        1000,
-        [vps: prefix <> vps, sps: prefix <> sps, pps: prefix <> pps],
-        true
-      )
-
-      perform_test(
-        "60-640x480-no-parameter-sets",
-        ctx.tmp_dir,
-        1000,
-        [vps: vps, sps: prefix <> sps, pps: <<0, 0, 1>> <> pps],
+        [vpss: [vps], spss: [sps], ppss: [pps]],
         true
       )
     end
