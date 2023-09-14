@@ -71,30 +71,25 @@ defmodule Membrane.H265.Parser.NALuParser do
 
     type = NALuTypes.get_type(parsed_fields.nal_unit_type)
 
-    {nalu, scheme_parser_state} =
-      try do
-        {parsed_fields, scheme_parser_state} =
-          parse_proper_nalu_type(nalu_body, scheme_parser_state, type)
+    {parsed_fields, scheme_parser_state} =
+      parse_proper_nalu_type(nalu_body, scheme_parser_state, type)
 
-        {%NALu{
-           parsed_fields: parsed_fields,
-           type: type,
-           status: :valid,
-           stripped_prefix: prefix,
-           payload: unprefixed_nalu_payload,
-           timestamps: timestamps
-         }, scheme_parser_state}
-      catch
-        "Cannot load information from SPS" ->
-          {%NALu{
-             parsed_fields: parsed_fields,
-             type: type,
-             status: :error,
-             stripped_prefix: prefix,
-             payload: unprefixed_nalu_payload,
-             timestamps: timestamps
-           }, scheme_parser_state}
-      end
+    # Mark nalu as invalid if there's no parameter sets
+    nalu_status =
+      if type in NALuTypes.vcl_nalu_types() and
+           not Map.has_key?(parsed_fields, :separate_colour_plane_flag),
+         do: :error,
+         else: :valid
+
+    nalu =
+      %NALu{
+        parsed_fields: parsed_fields,
+        type: type,
+        status: nalu_status,
+        stripped_prefix: prefix,
+        payload: unprefixed_nalu_payload,
+        timestamps: timestamps
+      }
 
     state = %{state | scheme_parser_state: scheme_parser_state}
 
