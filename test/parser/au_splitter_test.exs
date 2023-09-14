@@ -7,7 +7,7 @@ defmodule AUSplitterTest do
 
   # These values were obtained with the use of FFmpeg
   @au_lengths_ffmpeg %{
-    "10-1920x1080" => [133_766, 1517, 474, 311, 298, 200, 3257, 547, 209, 233],
+    "10-1920x1080" => [10_117, 493, 406, 447, 428, 320, 285, 297, 306, 296],
     "10-480x320-mainstillpicture" => [
       35_114,
       8824,

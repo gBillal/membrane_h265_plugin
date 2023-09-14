@@ -66,8 +66,7 @@ defmodule Membrane.H265.Parser do
 
   def_output_pad :output,
     demand_mode: :auto,
-    accepted_format:
-      %H265{alignment: alignment, nalu_in_metadata?: true} when alignment in [:au, :nalu]
+    accepted_format: %H265{nalu_in_metadata?: true}
 
   def_options vpss: [
                 spec: [binary()],
@@ -112,6 +111,18 @@ defmodule Membrane.H265.Parser do
                 Determines whether to drop the stream until the first key frame is received.
 
                 Defaults to true.
+                """
+              ],
+              repeat_parameter_sets: [
+                spec: boolean(),
+                default: false,
+                description: """
+                Repeat all parameter sets (`vps`, `sps` and `pps`) on each IRAP picture.
+
+                Parameter sets may be retrieved from:
+                  * The stream
+                  * `Parser` options.
+                  * `Decoder Configuration Record`, sent in `:hcv1` and `:hev1` stream types
                 """
               ],
               output_alignment: [
@@ -161,6 +172,7 @@ defmodule Membrane.H265.Parser do
       output_alignment: opts.output_alignment,
       framerate: opts.framerate,
       skip_until_keyframe: opts.skip_until_keyframe,
+      repeat_parameter_sets: opts.repeat_parameter_sets,
       frame_prefix: <<>>,
       cached_vpss: %{},
       cached_spss: %{},
@@ -443,7 +455,9 @@ defmodule Membrane.H265.Parser do
           remove_parameter_sets(au)
 
         _stream_structure ->
-          delete_duplicate_parameter_sets(au)
+          au
+          |> maybe_add_parameter_sets(state)
+          |> delete_duplicate_parameter_sets()
       end
 
     {au, stream_format_actions, state}
@@ -507,6 +521,17 @@ defmodule Membrane.H265.Parser do
     end)
   end
 
+  @spec maybe_add_parameter_sets(AUSplitter.access_unit(), state()) :: AUSplitter.access_unit()
+  defp maybe_add_parameter_sets(au, %{repeat_parameter_sets: false}), do: au
+
+  defp maybe_add_parameter_sets(au, state) do
+    if irap_au?(au),
+      do:
+        Map.values(state.cached_vpss) ++
+          Map.values(state.cached_spss) ++ Map.values(state.cached_ppss) ++ au,
+      else: au
+  end
+
   @spec remove_parameter_sets(AUSplitter.access_unit()) :: AUSplitter.access_unit()
   defp remove_parameter_sets(au) do
     Enum.reject(au, &(&1.type in [:vps, :sps, :pps]))
@@ -514,11 +539,11 @@ defmodule Membrane.H265.Parser do
 
   @spec delete_duplicate_parameter_sets(AUSplitter.access_unit()) :: AUSplitter.access_unit()
   defp delete_duplicate_parameter_sets(au) do
-    if idr_au?(au), do: Enum.uniq(au), else: au
+    if irap_au?(au), do: Enum.uniq(au), else: au
   end
 
-  @spec idr_au?(AUSplitter.access_unit()) :: boolean()
-  defp idr_au?(au), do: Enum.any?(au, &(&1.type in NALuTypes.irap_nalus()))
+  @spec irap_au?(AUSplitter.access_unit()) :: boolean()
+  defp irap_au?(au), do: Enum.any?(au, &(&1.type in NALuTypes.irap_nalus()))
 
   @spec wrap_into_buffer(
           AUSplitter.access_unit(),
