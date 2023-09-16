@@ -101,6 +101,7 @@ defmodule Membrane.H265.Parser.NALuParser.Schemes.SPS do
             vui_parameters()
           },
           execute: &load_timing_info_from_vps/3,
+          execute: &calculate_segment_address_length/3,
           save_state_as_global_state: {&{:sps, &1}, [:seq_parameter_set_id]}
         ]
 
@@ -303,6 +304,30 @@ defmodule Membrane.H265.Parser.NALuParser.Schemes.SPS do
         field: {:hrd_parameters_present_flag, :u1}
       }
     ]
+  end
+
+  defp calculate_segment_address_length(payload, state, _iterators) do
+    pic_width = get_in(state, [:__local__, :pic_width_in_luma_samples])
+    pic_height = get_in(state, [:__local__, :pic_height_in_luma_samples])
+
+    min_luma_block_size = get_in(state, [:__local__, :log2_min_luma_coding_block_size_minus3])
+
+    diff_max_min_luma_block_size =
+      get_in(state, [:__local__, :log2_diff_max_min_luma_coding_block_size])
+
+    ctb_log2_size_y = min_luma_block_size + diff_max_min_luma_block_size + 3
+    ctb_size_y = 1 <<< ctb_log2_size_y
+
+    pic_width_in_ctbs_y = ceil(pic_width / ctb_size_y)
+    pic_height_in_ctbs_y = ceil(pic_height / ctb_size_y)
+
+    segment_addr_length =
+      (pic_width_in_ctbs_y * pic_height_in_ctbs_y)
+      |> :math.log2()
+      |> ceil()
+
+    state = put_in(state, [:__local__, :segment_addr_length], segment_addr_length)
+    {payload, state}
   end
 
   defp load_timing_info_from_vps(payload, state, _iterators) do
