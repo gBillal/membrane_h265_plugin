@@ -36,6 +36,7 @@ defmodule Membrane.H265.Parser do
 
   alias __MODULE__.{
     AUSplitter,
+    AUTimestampGenerator,
     DecoderConfigurationRecord,
     Format,
     NALuParser,
@@ -95,15 +96,6 @@ defmodule Membrane.H265.Parser do
                 be provided via this option (only available for `:annexb` output stream format).
                 """
               ],
-              framerate: [
-                spec: {pos_integer(), pos_integer()} | nil,
-                default: nil,
-                description: """
-                Framerate of the video, represented as a tuple consisting of a numerator and the
-                denominator.
-                Its value will be sent inside the output `Membrane.H265` stream format.
-                """
-              ],
               skip_until_keyframe: [
                 spec: boolean(),
                 default: true,
@@ -151,6 +143,35 @@ defmodule Membrane.H265.Parser do
                 transported in the DCR, when in hev1 they will be present only in the stream (in-band).
                 If not provided or set to nil the stream's structure will remain unchanged.
                 """
+              ],
+              generate_best_effort_timestamps: [
+                spec:
+                  false
+                  | %{
+                      :framerate => {pos_integer(), pos_integer()},
+                      optional(:add_dts_offset) => boolean()
+                    },
+                default: false,
+                description: """
+                Generates timestamps based on given `framerate`.
+
+                This option works only when `Membrane.RemoteStream` format arrives.
+
+                Keep in mind that the generated timestamps may be inaccurate and lead
+                to video getting out of sync with other media, therefore h265 stream
+                should be kept in a container that stores the timestamps alongside.
+
+                By default, the parser adds negative DTS offset to the timestamps,
+                so that in case of frame reorder (which always happens when B frames
+                are present) the DTS was always bigger than PTS. If that is not desired,
+                you can set `add_dts_offset: false`.
+
+                The calculated DTS/PTS may be wrong since we base it on access units' POC (Picture Order Count).
+                We assume here that the POC is continuous on a CVS (Coded Video Sequence) which is
+                not guaranteed by the H265 specification. An example where POC values may not be continuous is
+                when generating sub-bitstream from the main stream by deleting access units belonging to a
+                higher temporal sub-layer.
+                """
               ]
 
   @impl true
@@ -162,6 +183,14 @@ defmodule Membrane.H265.Parser do
         stream_structure -> stream_structure
       end
 
+    {au_timestamp_generator, framerate} =
+      if opts.generate_best_effort_timestamps do
+        {AUTimestampGenerator.new(opts.generate_best_effort_timestamps),
+         opts.generate_best_effort_timestamps.framerate}
+      else
+        {nil, nil}
+      end
+
     state = %{
       nalu_splitter: nil,
       nalu_parser: nil,
@@ -170,7 +199,7 @@ defmodule Membrane.H265.Parser do
       profile: nil,
       previous_buffer_timestamps: {nil, nil},
       output_alignment: opts.output_alignment,
-      framerate: opts.framerate,
+      framerate: framerate,
       skip_until_keyframe: opts.skip_until_keyframe,
       repeat_parameter_sets: opts.repeat_parameter_sets,
       frame_prefix: <<>>,
@@ -181,7 +210,8 @@ defmodule Membrane.H265.Parser do
       initial_spss: opts.spss,
       initial_ppss: opts.ppss,
       input_stream_structure: nil,
-      output_stream_structure: output_stream_structure
+      output_stream_structure: output_stream_structure,
+      au_timestamp_generator: au_timestamp_generator
     }
 
     {[], state}
@@ -509,7 +539,7 @@ defmodule Membrane.H265.Parser do
     Enum.flat_map_reduce(aus, state, fn au, state ->
       {au, stream_format_actions, state} = process_au_parameter_sets(au, ctx, state)
 
-      {pts, dts} = hd(au).timestamps
+      {{pts, dts}, state} = prepare_timestamps(au, state)
 
       buffers_actions = [
         buffer:
@@ -519,6 +549,22 @@ defmodule Membrane.H265.Parser do
 
       {stream_format_actions ++ buffers_actions, state}
     end)
+  end
+
+  @spec prepare_timestamps(AUSplitter.access_unit(), state()) ::
+          {{Membrane.Time.t(), Membrane.Time.t()}, state()}
+  defp prepare_timestamps(au, state) do
+    if state.mode == :bytestream and state.au_timestamp_generator do
+      {timestamps, timestamp_generator} =
+        AUTimestampGenerator.generate_ts_with_constant_framerate(
+          au,
+          state.au_timestamp_generator
+        )
+
+      {timestamps, %{state | au_timestamp_generator: timestamp_generator}}
+    else
+      {Enum.find(au, &(&1.type in NALuTypes.vcl_nalu_types())).timestamps, state}
+    end
   end
 
   @spec maybe_add_parameter_sets(AUSplitter.access_unit(), state()) :: AUSplitter.access_unit()
