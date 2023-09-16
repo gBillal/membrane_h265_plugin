@@ -163,7 +163,7 @@ defmodule Membrane.H265.Parser do
 
                 By default, the parser adds negative DTS offset to the timestamps,
                 so that in case of frame reorder (which always happens when B frames
-                are present) the DTS was always bigger than PTS. If that is not desired,
+                are present) the DTS is always bigger than PTS. If that is not desired,
                 you can set `add_dts_offset: false`.
 
                 The calculated DTS/PTS may be wrong since we base it on access units' POC (Picture Order Count).
