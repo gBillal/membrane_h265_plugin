@@ -20,7 +20,7 @@ The package can be installed by adding `membrane_h265_plugin` to your list of de
 ```elixir
 def deps do
   [
-    {:membrane_h265_plugin, "~> 0.3.0"}
+    {:membrane_h265_plugin, "~> 0.3.1"}
   ]
 end
 ```
