@@ -1,7 +1,7 @@
 defmodule Membrane.H265.Plugin.Mixfile do
   use Mix.Project
 
-  @version "0.3.1"
+  @version "0.4.0"
   @github_url "https://github.com/gBillal/membrane_h265_plugin"
 
   def project do
@@ -36,14 +36,14 @@ defmodule Membrane.H265.Plugin.Mixfile do
 
   defp deps do
     [
-      {:membrane_core, "~> 0.12.0"},
+      {:membrane_core, "~> 1.0.0"},
       {:membrane_h265_format, "~> 0.2.0"},
-      {:bunch, "~> 1.4"},
+      {:bunch, "~> 1.5"},
       {:ex_doc, ">= 0.0.0", only: :dev, runtime: false},
       {:dialyxir, ">= 0.0.0", only: :dev, runtime: false},
       {:credo, ">= 0.0.0", only: :dev, runtime: false},
-      {:membrane_file_plugin, "~> 0.15.0", only: :test},
-      {:membrane_stream_plugin, "~> 0.3.1", only: :test}
+      {:membrane_file_plugin, "~> 0.16.0", only: :test},
+      {:membrane_stream_plugin, "~> 0.4.0", only: :test}
     ]
   end
 

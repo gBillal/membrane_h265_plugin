@@ -10,7 +10,7 @@ defmodule Membrane.H265.ProcessAllTest do
   alias Membrane.Testing.Pipeline
 
   defp make_pipeline(in_path, out_path, parameter_sets) do
-    structure = [
+    spec = [
       child(:file_src, %Membrane.File.Source{chunk_size: 40_960, location: in_path})
       |> child(:parser, %H265.Parser{
         vpss: parameter_sets[:vpss] || [],
@@ -20,7 +20,7 @@ defmodule Membrane.H265.ProcessAllTest do
       |> child(:sink, %Membrane.File.Sink{location: out_path})
     ]
 
-    Pipeline.start_link_supervised(structure: structure)
+    Pipeline.start_link_supervised(spec: spec)
   end
 
   defp strip_parameter_sets(file) do
@@ -49,7 +49,6 @@ defmodule Membrane.H265.ProcessAllTest do
     out_path = Path.join(tmp_dir, "output-all-#{filename}.h265")
 
     assert {:ok, _supervisor_pid, pid} = make_pipeline(in_path, out_path, parameter_sets)
-    assert_pipeline_play(pid)
     assert_end_of_stream(pid, :sink, :input, timeout)
 
     if ignore_parameter_sets do
@@ -58,7 +57,7 @@ defmodule Membrane.H265.ProcessAllTest do
       assert File.read(out_path) == File.read(in_path)
     end
 
-    Pipeline.terminate(pid, blocking?: true)
+    Pipeline.terminate(pid)
   end
 
   describe "ProcessAllPipeline should" do

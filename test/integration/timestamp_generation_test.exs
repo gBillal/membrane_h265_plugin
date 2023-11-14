@@ -77,14 +77,14 @@ defmodule Membrane.H265.TimestampGenerationTest do
 
     {:ok, _supervisor_pid, pid} =
       Pipeline.start_supervised(
-        structure: [
+        spec: [
           child(:source, %TestSource{mode: mode})
           |> child(:parser, Parser)
           |> child(:sink, Sink)
         ]
       )
 
-    assert_pipeline_play(pid)
+    assert_sink_playing(pid, :sink)
     send_buffers_actions = for buffer <- input_buffers, do: {:buffer, {:output, buffer}}
     Pipeline.message_child(pid, :source, send_buffers_actions ++ [end_of_stream: :output])
 
@@ -95,7 +95,7 @@ defmodule Membrane.H265.TimestampGenerationTest do
       assert_sink_buffer(pid, :sink, %Buffer{payload: ^payload, pts: nil, dts: nil})
     end)
 
-    Pipeline.terminate(pid, blocking?: true)
+    Pipeline.terminate(pid)
   end
 
   test "if the pts and dts are generated correctly for stream without frame reorder and no-bframes in :bytestream mode when framerate is given" do
@@ -119,7 +119,7 @@ defmodule Membrane.H265.TimestampGenerationTest do
 
     pid =
       Pipeline.start_supervised!(
-        structure: [
+        spec: [
           child(:source, %TestSource{mode: mode})
           |> child(:parser, %Membrane.H265.Parser{
             generate_best_effort_timestamps: %{framerate: framerate, add_dts_offset: dts_offset}
@@ -128,7 +128,7 @@ defmodule Membrane.H265.TimestampGenerationTest do
         ]
       )
 
-    assert_pipeline_play(pid)
+    assert_sink_playing(pid, :sink)
     send_buffers_actions = for buffer <- input_buffers, do: {:buffer, {:output, buffer}}
     Pipeline.message_child(pid, :source, send_buffers_actions ++ [end_of_stream: :output])
 
@@ -145,6 +145,6 @@ defmodule Membrane.H265.TimestampGenerationTest do
                 Membrane.Time.as_milliseconds(dts, :round)}
     end)
 
-    Pipeline.terminate(pid, blocking?: true)
+    Pipeline.terminate(pid)
   end
 end
