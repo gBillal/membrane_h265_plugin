@@ -10,13 +10,13 @@ defmodule Membrane.H265.SkipUntilTest do
   alias Membrane.Testing.Pipeline
 
   defp make_pipeline(in_path, out_path, skip_until_keyframe) do
-    structure = [
+    spec = [
       child(:file_src, %Membrane.File.Source{chunk_size: 40_960, location: in_path})
       |> child(:parser, %H265.Parser{skip_until_keyframe: skip_until_keyframe})
       |> child(:sink, %Membrane.File.Sink{location: out_path})
     ]
 
-    Pipeline.start_link_supervised(structure: structure)
+    Pipeline.start_link_supervised(spec: spec)
   end
 
   describe "The parser should" do
@@ -28,7 +28,6 @@ defmodule Membrane.H265.SkipUntilTest do
       out_path = Path.join(ctx.tmp_dir, "output-all-#{filename}.h265")
 
       assert {:ok, _supervisor_pid, pid} = make_pipeline(in_path, out_path, false)
-      assert_pipeline_play(pid)
       refute_sink_buffer(pid, :sink, _)
 
       Pipeline.terminate(pid)
@@ -40,10 +39,9 @@ defmodule Membrane.H265.SkipUntilTest do
       out_path = Path.join(ctx.tmp_dir, "output-#{filename}.h265")
       ref_path = "test/fixtures/reference-#{filename}.h265"
       assert {:ok, _supervisor_pid, pid} = make_pipeline(in_path, out_path, true)
-      assert_pipeline_play(pid)
       assert_end_of_stream(pid, :sink)
       assert File.read(out_path) == File.read(ref_path)
-      Pipeline.terminate(pid, blocking?: true)
+      Pipeline.terminate(pid)
     end
 
     test "skip until AU with parameters is provided, no matter if it contains keyframe, when `skip_until_keyframe: false`",
@@ -53,7 +51,6 @@ defmodule Membrane.H265.SkipUntilTest do
       out_path = Path.join(ctx.tmp_dir, "output-#{filename}.h265")
       ref_path = "test/fixtures/reference-#{filename}.h265"
       assert {:ok, _supervisor_pid, pid} = make_pipeline(in_path, out_path, false)
-      assert_pipeline_play(pid)
       assert_end_of_stream(pid, :sink)
       assert File.read(out_path) == File.read(ref_path)
       Pipeline.terminate(pid)
@@ -64,7 +61,6 @@ defmodule Membrane.H265.SkipUntilTest do
       in_path = "../fixtures/input-#{filename}.h265" |> Path.expand(__DIR__)
       ref_path = "test/fixtures/reference-pss-no-irap-pss-irap.h265"
       assert {:ok, _supervisor_pid, pid} = make_pipeline(in_path, ref_path, true)
-      assert_pipeline_play(pid)
       assert_end_of_stream(pid, :parser)
       refute_sink_buffer(pid, :sink, _, 500)
       Pipeline.terminate(pid)

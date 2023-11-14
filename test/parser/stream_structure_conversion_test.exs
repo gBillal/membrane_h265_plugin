@@ -27,7 +27,7 @@ defmodule Membrane.H265.StreamStructureConversionTest do
 
     mode = get_mode_from_alignment(alignment)
 
-    structure =
+    spec =
       child(:source, %H265.Support.TestSource{
         mode: mode,
         output_raw_stream_structure: :annexb
@@ -39,12 +39,12 @@ defmodule Membrane.H265.StreamStructureConversionTest do
       })
       |> child(:sink, Sink)
 
-    Pipeline.start_link_supervised!(structure: structure)
+    Pipeline.start_link_supervised!(spec: spec)
   end
 
   defp perform_annexb_test(pipeline_pid, data, mode, identical_order?) do
     buffers = prepare_buffers(data, mode, :annexb, false)
-    assert_pipeline_play(pipeline_pid)
+    assert_sink_playing(pipeline_pid, :sink)
     actions = for buffer <- buffers, do: {:buffer, {:output, buffer}}
     Pipeline.message_child(pipeline_pid, :source, actions ++ [end_of_stream: :output])
 
@@ -75,7 +75,7 @@ defmodule Membrane.H265.StreamStructureConversionTest do
       assert MapSet.equal?(fixture_nalus_set, converted_nalus_set)
     end
 
-    Pipeline.terminate(pipeline_pid, blocking?: true)
+    Pipeline.terminate(pipeline_pid)
   end
 
   defp make_hvc_pipelines(source_file_path, alignment, parsers, hvc) do
@@ -97,13 +97,13 @@ defmodule Membrane.H265.StreamStructureConversionTest do
       |> child(:sink, Sink)
 
     {
-      Pipeline.start_link_supervised!(structure: fixture_pipeline_structure),
-      Pipeline.start_link_supervised!(structure: conversion_pipeline_structure)
+      Pipeline.start_link_supervised!(spec: fixture_pipeline_structure),
+      Pipeline.start_link_supervised!(spec: conversion_pipeline_structure)
     }
   end
 
   defp perform_hvc_test({fixture_pipeline_pid, conversion_pipeline_pid}, hvc) do
-    assert_pipeline_play(fixture_pipeline_pid)
+    assert_sink_playing(fixture_pipeline_pid, :sink)
     assert_end_of_stream(fixture_pipeline_pid, :sink, :input, 3_000)
 
     fixture_buffers = receive_buffer_payloads(fixture_pipeline_pid)
@@ -112,7 +112,7 @@ defmodule Membrane.H265.StreamStructureConversionTest do
       stream_structure: fixture_stream_structure
     })
 
-    assert_pipeline_play(conversion_pipeline_pid)
+    assert_sink_playing(conversion_pipeline_pid, :sink)
     assert_end_of_stream(conversion_pipeline_pid, :sink, :input, 3_000)
 
     converted_buffers = receive_buffer_payloads(conversion_pipeline_pid)
