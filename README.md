@@ -1,3 +1,6 @@
+# Notice
+The code in this repository is merged into [membrane_h26x_plugin](https://github.com/membraneframework/membrane_h26x_plugin).
+
 # Membrane H265 Plugin
 
 [![Hex.pm](https://img.shields.io/hexpm/v/membrane_h265_plugin.svg)](https://hex.pm/packages/membrane_h265_plugin)
